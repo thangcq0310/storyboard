@@ -250,22 +250,40 @@ function App() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <select className="select-field text-sm" value={artStyle} onChange={(event) => setArtStyle(event.target.value)} aria-label="Visual style">
-                    <option>Cinematic</option><option>Anime</option><option>Realistic</option><option>Abstract</option>
-                  </select>
-                  <select className="select-field text-sm" value={mood} onChange={(event) => setMood(event.target.value)} aria-label="Mood">
-                    <option>Dramatic</option><option>Joyful</option><option>Mysterious</option><option>Melancholic</option><option>Energetic</option>
-                  </select>
-                  <input className="input-field text-sm" type="number" min={3} max={60} value={duration} onChange={(event) => setDuration(Number(event.target.value))} aria-label="Duration" />
-                  <select className="select-field text-sm" value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as '16:9' | '9:16' | '1:1')} aria-label="Aspect ratio">
-                    <option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option>
-                  </select>
-                  <select className="select-field text-sm" value={platform} onChange={(event) => setPlatform(event.target.value)} aria-label="Platform">
-                    <option>YouTube</option><option>TikTok</option><option>Instagram</option><option>Web</option>
-                  </select>
-                  <select className="select-field text-sm" value={detailLevel} onChange={(event) => setDetailLevel(event.target.value)} aria-label="Detail level">
-                    <option>Concise</option><option>Detailed</option><option>Production-grade</option>
-                  </select>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Mood</span>
+                    <select className="select-field text-sm" value={mood} onChange={(event) => setMood(event.target.value)} aria-label="Mood">
+                      <option>Dramatic</option><option>Joyful</option><option>Mysterious</option><option>Melancholic</option><option>Energetic</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Visual style</span>
+                    <select className="select-field text-sm" value={artStyle} onChange={(event) => setArtStyle(event.target.value)} aria-label="Visual style">
+                      <option>Cinematic</option><option>Anime</option><option>Realistic</option><option>Abstract</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Duration</span>
+                    <input className="input-field text-sm" type="number" min={3} max={60} value={duration} onChange={(event) => setDuration(Number(event.target.value))} aria-label="Duration" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Aspect ratio</span>
+                    <select className="select-field text-sm" value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as '16:9' | '9:16' | '1:1')} aria-label="Aspect ratio">
+                      <option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Platform</span>
+                    <select className="select-field text-sm" value={platform} onChange={(event) => setPlatform(event.target.value)} aria-label="Platform">
+                      <option>YouTube</option><option>TikTok</option><option>Instagram</option><option>Web</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Detail level</span>
+                    <select className="select-field text-sm" value={detailLevel} onChange={(event) => setDetailLevel(event.target.value)} aria-label="Detail level">
+                      <option>Concise</option><option>Detailed</option><option>Production-grade</option>
+                    </select>
+                  </label>
                 </div>
 
                 <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-3">
@@ -280,9 +298,12 @@ function App() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <select className="select-field text-sm" value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="Language">
-                    <option>English</option><option>Vietnamese</option><option>Japanese</option><option>Korean</option>
-                  </select>
+                  <label className="block">
+                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Language</span>
+                    <select className="select-field text-sm" value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="Language">
+                      <option>English</option><option>Vietnamese</option><option>Japanese</option><option>Korean</option>
+                    </select>
+                  </label>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
