@@ -1,456 +1,108 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import {
-  Wand2, LayoutGrid, ImageIcon, Film, Music, Settings2, Download,
-  Upload, BarChart2, Loader2, Play, FastForward, CheckCircle2,
-  Sliders, Sparkles, Square, Zap, ChevronDown, ChevronRight, Copy,
-} from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { CheckCircle2, Copy, Settings2, Sparkles, Upload } from 'lucide-react';
 
-import type { Scene, WorkflowMode, WorkflowCase, Mode, TabType, AnalyticsStats, JobEntry, BatchItem, ExportSummary } from './types';
-import type { SeedancePrompt } from './prompts/seedancePrompts';
-
+import type { AnalyticsStats, BatchItem, JobEntry, Scene, WorkflowCase } from './types';
 import { initApiClient, PROVIDERS } from './lib/api';
 import type { ProviderId } from './lib/api';
-import { getCategories, getPromptsByCategory } from './prompts/seedancePrompts';
-import { analyzeVideoProfile, selectWorkflowCase } from './lib/caseRouter';
+import { analyzeVideoProfile } from './lib/caseRouter';
 import { analyzeSafety } from './lib/safetyAnalyzer';
 import { buildAllPrompts } from './lib/promptBuilder';
-import { SAMPLE_WORKFLOWS, loadRecentWorkflows, saveWorkflowToHistory } from './lib/sampleWorkflows';
-import type { WorkflowHistoryItem } from './lib/sampleWorkflows';
-import { getCaseInfo } from './lib/workflowCases';
+import { saveWorkflowToHistory } from './lib/sampleWorkflows';
+import { WORKFLOW_CASES, getCaseInfo } from './lib/workflowCases';
 
-import TabBar from './components/TabBar';
 import StoryboardPreview from './components/StoryboardPreview';
-import CaseTemplateCard from './components/CaseTemplateCard';
-import WorkflowPipeline from './components/WorkflowPipeline';
 import AIReasoningPanel from './components/AIReasoningPanel';
 import RenderSafetyPanel from './components/RenderSafetyPanel';
+import WorkflowPipeline from './components/WorkflowPipeline';
 import PromptArchitecturePanel from './components/PromptArchitecturePanel';
 import PromptOutputPanel from './components/PromptOutputPanel';
-import FinalVideoPlan from './components/FinalVideoPlan';
-import RecentWorkflows from './components/RecentWorkflows';
 import AccordionSection from './components/AccordionSection';
 import ExportPanel from './components/ExportPanel';
 import SettingsModal from './components/SettingsModal';
-import AnalyticsModal from './components/AnalyticsModal';
 import BatchModal from './components/BatchModal';
 
-const sceneTemplates = [
-  { label: 'Establishing Shot', value: 'Wide angle establishing shot of the environment, highly detailed, cinematic lighting.' },
-  { label: 'Close-up on Character', value: "Extreme close up on the character's face showing emotion, shallow depth of field." },
-  { label: 'Action/Dance Sequence', value: 'Dynamic action shot, character performing a dance move, motion blur, energetic atmosphere.' },
-  { label: 'Environmental Transition', value: 'Camera pans across the environment, transitioning between locations, smooth movement.' },
-];
+type OutputTab = 'storyboard' | 'seedance' | 'shotlist' | 'export';
 
 function App() {
-  // ── Mode & Tabs ──
-  const [mode, setMode] = useState<Mode>('creator');
-  const [activeTab, setActiveTab] = useState<TabType>('storyboard');
-
-  // ── Stepper ──
-  const [currentStep, setCurrentStep] = useState(1);
-
-  // ── Processing ──
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [generationStatus, setGenerationStatus] = useState<'idle' | 'scenes' | 'prompts' | 'images'>('idle');
-
-  // ── API Client ──
   const apiClient = useRef(initApiClient());
+
   const [showSettings, setShowSettings] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
   const [showBatch, setShowBatch] = useState(false);
 
-  // ── Input State ──
+  const [workflowCase, setWorkflowCase] = useState<WorkflowCase | null>(null);
   const [storyIdea, setStoryIdea] = useState('');
   const [subject, setSubject] = useState('');
   const [environment, setEnvironment] = useState('');
-  const [numScenes, setNumScenes] = useState(4);
   const [artStyle, setArtStyle] = useState('Cinematic');
-  const [workflowMode, setWorkflowMode] = useState<WorkflowMode>('full');
-  const [workflowCase, setWorkflowCase] = useState<WorkflowCase>('case1');
   const [mood, setMood] = useState('Dramatic');
-  const [visualStyle, setVisualStyle] = useState('Cinematic');
-  const [motionLevel, setMotionLevel] = useState(70);
-  const [duration, setDuration] = useState(5);
+  const [duration, setDuration] = useState(8);
+  const [motionLevel] = useState(55);
+  const [numScenes] = useState(6);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
   const [platform, setPlatform] = useState('YouTube');
-  const [budgetMode, setBudgetMode] = useState(false);
+  const [budgetMode] = useState(false);
 
-  // ── Scene State ──
-  const [scenes, setScenes] = useState<Scene[]>([]);
-  const [charConsistency] = useState(true);
+  const [cinematicStylePrompt, setCinematicStylePrompt] = useState('');
+  const [cameraPrompt, setCameraPrompt] = useState('');
+  const [motionPrompt, setMotionPrompt] = useState('');
+  const [negativePrompt, setNegativePrompt] = useState('');
+  const [additionalInstruction, setAdditionalInstruction] = useState('');
 
-  // ── Image Generation ──
+  const [language, setLanguage] = useState('English');
+  const [outputFormatSetting, setOutputFormatSetting] = useState('Prompt Pack');
+  const [detailLevel, setDetailLevel] = useState('Detailed');
+  const [generateShotlist, setGenerateShotlist] = useState(true);
+  const [generateSeedancePrompt, setGenerateSeedancePrompt] = useState(true);
+
   const [imageProvider, setImageProvider] = useState<ProviderId>(() => apiClient.current.getModelConfig().imageProvider);
   const [imageModel, setImageModel] = useState(() => apiClient.current.getModelConfig().imageModel);
-  const [_imageQuality, _setImageQuality] = useState('1024px');
-  const [selectedImages, setSelectedImages] = useState<Record<string, boolean>>({});
-
-  // ── Video State ──
   const [videoProvider, setVideoProvider] = useState<ProviderId>(() => apiClient.current.getModelConfig().videoProvider);
   const [videoModel, setVideoModel] = useState(() => apiClient.current.getModelConfig().videoModel);
-  const [addMusic, setAddMusic] = useState(false);
-  const [danceStyle, setDanceStyle] = useState('Smooth / Cinematic');
-  const [motionIntensity, setMotionIntensity] = useState(75);
-  const [videosDone, setVideosDone] = useState(0);
 
-  // ── Prompt Selector ──
-  const [promptCategory, setPromptCategory] = useState('All');
-  const [selectedPrompt, setSelectedPrompt] = useState<SeedancePrompt | null>(null);
+  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [selectedImages, setSelectedImages] = useState<Record<string, boolean>>({});
+  const [outputTab, setOutputTab] = useState<OutputTab>('storyboard');
 
-  // ── Assembly ──
-  const [transitionEffect, setTransitionEffect] = useState('Fade');
-  const [transitionDuration, setTransitionDuration] = useState(10);
-  const [addSubtitles, setAddSubtitles] = useState(true);
-  const [subtitleText, setSubtitleText] = useState('');
-  const [previewPlaying, setPreviewPlaying] = useState(false);
-  const [previewTime, setPreviewTime] = useState(0);
-
-  // ── Export ──
-  const [exportQuality, setExportQuality] = useState('1080p');
-  const [exportFormat, setExportFormat] = useState('MP4 (H.264)');
-  const [exportComplete, setExportComplete] = useState(false);
-
-  // ── Batch ──
   const [batchQueue, setBatchQueue] = useState<BatchItem[]>([]);
   const [batchProcessing, setBatchProcessing] = useState(false);
-  const [batchCurrentIndex, setBatchCurrentIndex] = useState(0);
+  const [batchCurrentIndex] = useState(0);
 
-  // ── Recent Workflows ──
-  const [recentWorkflows, setRecentWorkflows] = useState<WorkflowHistoryItem[]>(() => {
-    const saved = loadRecentWorkflows();
-    return saved.length > 0 ? saved : SAMPLE_WORKFLOWS;
-  });
-
-  // ── Analytics ──
-  const [stats, setStats] = useState<AnalyticsStats>({
-    totalImages: 0, totalVideos: 0,
-    successfulImages: 0, successfulVideos: 0,
-    failedImages: 0, failedVideos: 0,
-    totalCost: 0, batchJobs: 0, lastUpdated: Date.now(),
-  });
-  const [jobHistory, setJobHistory] = useState<JobEntry[]>([]);
-
-  useEffect(() => {
-    const savedStats = localStorage.getItem('fusionfact_stats');
-    if (savedStats) { try { setStats(JSON.parse(savedStats)); } catch {} }
-    const savedHistory = localStorage.getItem('fusionfact_history');
-    if (savedHistory) { try { setJobHistory(JSON.parse(savedHistory)); } catch {} }
-  }, []);
-
-  useEffect(() => { localStorage.setItem('fusionfact_stats', JSON.stringify(stats)); }, [stats]);
-  useEffect(() => { localStorage.setItem('fusionfact_history', JSON.stringify(jobHistory)); }, [jobHistory]);
-
-  // ── AI Analysis (computed) ──
-  const aiAnalysis = useMemo(() =>
-    analyzeVideoProfile(mood, motionLevel, duration, numScenes, budgetMode),
-    [mood, motionLevel, duration, numScenes, budgetMode]
+  const aiAnalysis = useMemo(
+    () => {
+      const activeCase = workflowCase || 'case1';
+      return analyzeVideoProfile(mood, motionLevel, duration, getCaseInfo(activeCase).panels, activeCase === 'case19');
+    },
+    [mood, motionLevel, duration, workflowCase],
   );
 
-  const safetyResults = useMemo(() =>
-    analyzeSafety(motionLevel, duration, numScenes, budgetMode),
-    [motionLevel, duration, numScenes, budgetMode]
+  const safetyResults = useMemo(
+    () => {
+      const activeCase = workflowCase || 'case1';
+      return analyzeSafety(motionLevel, duration, getCaseInfo(activeCase).panels, activeCase === 'case19');
+    },
+    [motionLevel, duration, workflowCase],
   );
 
-  // ── Built prompts ──
-  const builtPrompts = useMemo(() =>
-    buildAllPrompts(scenes.filter(s => selectedImages[s.id]), artStyle, mood, workflowCase),
-    [scenes, selectedImages, artStyle, mood, workflowCase]
+  const builtPrompts = useMemo(
+    () => buildAllPrompts(scenes.filter((scene) => selectedImages[scene.id]), artStyle, mood, workflowCase || 'case1'),
+    [scenes, selectedImages, artStyle, mood, workflowCase],
   );
 
-  // ── Update workflow case based on AI analysis ──
-  useEffect(() => {
-    setWorkflowCase(selectWorkflowCase(motionLevel, duration, numScenes, budgetMode));
-  }, [motionLevel, duration, numScenes, budgetMode]);
-
-  // ── Helpers ──
-  const updateStats = (type: 'image' | 'video', success: boolean, provider: string) => {
-    const cost = type === 'image' ? 0.003 : 0.05;
-    const newEntry: JobEntry = { id: `job-${Date.now()}`, type, provider, status: success ? 'success' : 'failed', timestamp: Date.now(), cost: success ? cost : 0 };
-    setJobHistory(prev => [newEntry, ...prev].slice(0, 10));
-    setStats(prev => ({
-      ...prev,
-      totalImages: type === 'image' ? prev.totalImages + 1 : prev.totalImages,
-      totalVideos: type === 'video' ? prev.totalVideos + 1 : prev.totalVideos,
-      successfulImages: type === 'image' && success ? prev.successfulImages + 1 : prev.successfulImages,
-      successfulVideos: type === 'video' && success ? prev.successfulVideos + 1 : prev.successfulVideos,
-      failedImages: type === 'image' && !success ? prev.failedImages + 1 : prev.failedImages,
-      failedVideos: type === 'video' && !success ? prev.failedVideos + 1 : prev.failedVideos,
-      totalCost: prev.totalCost + (success ? cost : 0),
-      lastUpdated: Date.now(),
-    }));
-  };
-
-  const updateBatchStats = (imagesCount: number, videosCount: number, successCount: number) => {
-    setStats(prev => ({
-      ...prev,
-      totalImages: prev.totalImages + imagesCount,
-      totalVideos: prev.totalVideos + videosCount,
-      successfulImages: prev.successfulImages + successCount,
-      failedImages: prev.failedImages + (imagesCount - successCount),
-      batchJobs: prev.batchJobs + 1,
-      totalCost: prev.totalCost + (0.003 * successCount) + (0.05 * successCount),
-      lastUpdated: Date.now(),
-    }));
-  };
-
-  const clearStats = () => {
-    setStats({ totalImages: 0, totalVideos: 0, successfulImages: 0, successfulVideos: 0, failedImages: 0, failedVideos: 0, totalCost: 0, batchJobs: 0, lastUpdated: Date.now() });
-    setJobHistory([]);
-  };
-
-  // ── Batch CSV ──
-  const parseCSV = (csvText: string): BatchItem[] => {
-    const lines = csvText.trim().split('\n');
-    if (lines.length < 2) return [];
-    const headers = lines[0].toLowerCase().split(',').map(h => h.trim());
-    const storyIdx = headers.indexOf('story');
-    const scenesIdx = headers.indexOf('scenes');
-    const styleIdx = headers.indexOf('style');
-    if (storyIdx === -1) return [];
-    const items: BatchItem[] = [];
-    for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim());
-      if (values[storyIdx]) {
-        items.push({
-          id: `batch-${i}`,
-          story: values[storyIdx],
-          scenes: scenesIdx !== -1 ? Math.min(Math.max(parseInt(values[scenesIdx]) || 4, 3), 10) : 4,
-          style: styleIdx !== -1 ? values[styleIdx] || 'Cinematic' : 'Cinematic',
-          status: 'pending', images: [], videos: [],
-        });
-      }
-    }
-    return items;
-  };
-
-  const handleLoadCSV = (csv: string) => {
-    const items = parseCSV(csv);
-    if (items.length === 0) { alert('Invalid CSV format.'); return; }
-    setBatchQueue(items);
-  };
-
-  const handleRemoveFromBatch = (id: string) => setBatchQueue(prev => prev.filter(item => item.id !== id));
-
-  const processBatchItem = async (item: BatchItem, index: number): Promise<BatchItem> => {
-    if (!apiClient.current.isProviderConfigured(imageProvider) || !apiClient.current.isProviderConfigured(videoProvider)) {
-      return { ...item, status: 'failed', error: 'API not configured' };
-    }
-    setBatchCurrentIndex(index);
-    setBatchQueue(prev => prev.map((q, i) => i === index ? { ...q, status: 'processing' as const } : q));
-
-    const generatedScenes = Array.from({ length: item.scenes }).map((_, i) => ({
-      id: `scene-${item.id}-${i}`,
-      description: `Scene ${i + 1}: Based on "${item.story}"`,
-      prompt: `Detailed prompt for Scene ${i + 1}. ${item.story}. Style: ${item.style}, high quality, detailed lighting.`,
-    }));
-
-    const imageUrls: string[] = [];
-    for (let i = 0; i < generatedScenes.length; i++) {
-      setProgress(Math.round(((i + 1) / (generatedScenes.length * 2)) * 100));
-      const result = await apiClient.current.image.generateImage(generatedScenes[i].prompt, imageModel, { resolution: '1 MP' as const, aspect_ratio: '16:9' }, imageProvider);
-      if (result.data?.url) { imageUrls.push(result.data.url); updateStats('image', true, 'FLUX'); }
-      else { updateStats('image', false, 'FLUX'); }
-    }
-
-    const danceStyleTags: Record<string, string> = {
-      'Smooth / Cinematic': 'smooth cinematic movement, flowing motion, graceful',
-      'Hip Hop': 'hip hop dance, street style, energetic moves, rhythm',
-      'Ballet': 'ballet dance, elegant, precise movements, poise',
-      'Freestyle': 'freestyle dance, dynamic, spontaneous movement',
-      'Cinematic': 'smooth cinematic movement, flowing motion, graceful',
-      'Anime': 'anime style, vibrant, dynamic movement',
-      'Realistic': 'realistic natural movement, subtle motion',
-      'Abstract': 'abstract art, mesmerizing patterns, flowing colors',
-    };
-
-    const videoUrls: string[] = [];
-    for (let i = 0; i < imageUrls.length; i++) {
-      setProgress(Math.round(((generatedScenes.length + i + 1) / (generatedScenes.length * 2)) * 100));
-      const result = await apiClient.current.video.generateVideo(imageUrls[i], videoModel, { duration: 5 }, danceStyleTags[item.style] || item.style, videoProvider);
-      if (result.data?.url) { videoUrls.push(result.data.url); updateStats('video', true, 'Seedance2'); }
-      else { updateStats('video', false, 'Seedance2'); }
-    }
-
-    updateBatchStats(generatedScenes.length, imageUrls.length, imageUrls.length);
-    setProgress(100);
-    return { ...item, status: 'completed' as const, images: imageUrls, videos: videoUrls };
-  };
-
-  const handleStartBatch = async () => {
-    if (batchQueue.length === 0) return;
-    if (!apiClient.current.isProviderConfigured(imageProvider) || !apiClient.current.isProviderConfigured(videoProvider)) {
-      alert('Configure image and video provider credentials first.');
-      return;
-    }
-    setBatchProcessing(true);
-    setProgress(0);
-    try {
-      for (let i = 0; i < batchQueue.length; i++) {
-        if (!batchProcessing) break;
-        const processedItem = await processBatchItem(batchQueue[i], i);
-        setBatchQueue(prev => prev.map((q, j) => j === i ? processedItem : q));
-      }
-    } catch (error) { console.error('Batch error:', error); alert('Batch processing error.'); }
-    finally { setBatchProcessing(false); setProgress(100); }
-  };
-
-  const handleCancelBatch = () => {
-    setBatchProcessing(false);
-    setBatchQueue(prev => prev.map(item => item.status === 'processing' ? { ...item, status: 'pending' as const } : item));
-  };
-
-  // ── Generate Storyboard ──
-  const handleGenerateStoryboard = async () => {
-    if (workflowMode !== 'videos' && !apiClient.current.isProviderConfigured(imageProvider)) {
-      alert('Configure image provider credentials first.');
-      return;
-    }
-    setIsProcessing(true);
-    setGenerationStatus('scenes');
-    const panelCount = getCaseInfo(workflowCase).panels;
-
-    setTimeout(() => {
-      const generatedScenes: Scene[] = Array.from({ length: panelCount }).map((_, i) => ({
-        id: `scene-${i + 1}`, description: '', prompt: '',
-      }));
-      setScenes(generatedScenes);
-      setGenerationStatus('prompts');
-
-      if (workflowMode === 'videos') { setIsProcessing(false); setCurrentStep(5); return; }
-
-      setTimeout(() => {
-        const updatedScenes = generatedScenes.map((s, idx) => {
-          const charRef = charConsistency ? 'Maintain consistent character appearance across all scenes. Same subject, same face, same clothing.' : '';
-          const composition = idx === 0 ? 'Wide shot establishing scene' : idx === generatedScenes.length - 1 ? 'Close-up final moment' : 'Medium shot';
-          return { ...s, prompt: `${charRef} ${s.description}. Style: ${artStyle}, ${composition}, professional photography, high quality, detailed lighting, cinematic color grading, 8k resolution, masterpiece.` };
-        });
-        setScenes(updatedScenes);
-        setGenerationStatus('images');
-
-        // Save to recent workflows
-        saveWorkflowToHistory({
-          title: storyIdea.slice(0, 40) || 'Untitled',
-          storyIdea,
-          subject,
-          environment,
-          artStyle,
-          workflowCase,
-          mood,
-          duration,
-          motionLevel,
-          aspectRatio,
-          platform,
-          budgetMode,
-        });
-
-        if (workflowMode === 'full' || workflowMode === 'images') {
-          handleGenerateImagesInternal(updatedScenes);
-        }
-      }, 1000);
-    }, 1000);
-  };
-
-  const handleGenerateImagesInternal = async (scenesToProcess: Scene[]) => {
-    const resolutionMap: Record<string, '1 MP' | '4 MP'> = { '1024px': '1 MP', '2048px (Slow)': '4 MP' };
-    const resolution = resolutionMap[_imageQuality] || '1 MP';
-
-    try {
-      const updatedScenes: Scene[] = [];
-      setProgress(0);
-      for (let i = 0; i < scenesToProcess.length; i++) {
-        setProgress(Math.round(((i + 1) / scenesToProcess.length) * 100));
-        let fullPrompt = scenesToProcess[i].prompt;
-        if (charConsistency) fullPrompt += ', same character, consistent appearance, high detail';
-        const result = await apiClient.current.image.generateImage(fullPrompt, imageModel, { resolution, aspect_ratio: aspectRatio === '1:1' ? '1:1' : aspectRatio === '9:16' ? '9:16' : '16:9' }, imageProvider);
-        if (result.data?.url) { updateStats('image', true, 'FLUX'); updatedScenes.push({ ...scenesToProcess[i], imageUrl: result.data.url }); }
-        else { updateStats('image', false, 'FLUX'); updatedScenes.push({ ...scenesToProcess[i], imageUrl: '' }); }
-      }
-      setScenes(updatedScenes);
-      const initialSelected: Record<string, boolean> = {};
-      updatedScenes.forEach(s => initialSelected[s.id] = !!s.imageUrl);
-      setSelectedImages(initialSelected);
-      setGenerationStatus('idle');
-      setCurrentStep(2);
-      const failedCount = updatedScenes.filter(s => !s.imageUrl).length;
-      if (failedCount > 0) alert(`Warning: ${failedCount} image(s) failed.`);
-    } catch (error) { console.error('Image gen error:', error); alert('Failed to generate images.'); }
-    finally { setIsProcessing(false); }
-  };
-
-  // ── Generate Videos ──
-  const handleGenerateVideos = async () => {
-    if (!apiClient.current.isProviderConfigured(videoProvider)) { alert('Configure video provider credentials first.'); return; }
-    const totalSelected = Object.values(selectedImages).filter(Boolean).length;
-    if (totalSelected === 0) { alert('Select at least one image.'); return; }
-
-    setIsProcessing(true);
-    setVideosDone(0);
-    setProgress(0);
-    setCurrentStep(5);
-
-    const danceStyleTags: Record<string, string> = {
-      'Smooth / Cinematic': 'smooth cinematic movement, flowing motion, graceful',
-      'Hip Hop': 'hip hop dance, street style, energetic moves, rhythm',
-      'Ballet': 'ballet dance, elegant, precise movements, poise',
-      'Freestyle': 'freestyle dance, dynamic, spontaneous movement',
-    };
-    const prompt = selectedPrompt?.prompt || danceStyleTags[danceStyle] || danceStyle;
-
-    try {
-      const selectedSceneIndices = scenes.map((s, i) => (selectedImages[s.id] ? i : -1)).filter(i => i >= 0);
-      for (let i = 0; i < selectedSceneIndices.length; i++) {
-        const sceneIdx = selectedSceneIndices[i];
-        const scene = scenes[sceneIdx];
-        setVideosDone(i);
-        setProgress(Math.round(((i + 1) / totalSelected) * 100));
-        const result = await apiClient.current.video.generateVideo(scene.imageUrl || '', videoModel, { duration }, prompt, videoProvider);
-        if (result.error) updateStats('video', false, videoModel);
-        else if (result.data?.url) updateStats('video', true, videoModel);
-      }
-      setVideosDone(totalSelected);
-      setProgress(100);
-      setCurrentStep(6);
-    } catch (error) { console.error('Video error:', error); alert('Failed to generate videos.'); }
-    finally { setIsProcessing(false); }
-  };
-
-  const toggleImageSelect = (id: string) => setSelectedImages(prev => ({ ...prev, [id]: !prev[id] }));
-
-  // ── Load sample workflow ──
-  const loadWorkflow = useCallback((item: WorkflowHistoryItem) => {
-    setStoryIdea(item.storyIdea);
-    setSubject(item.subject || '');
-    setEnvironment(item.environment || '');
-    setArtStyle(item.artStyle);
-    setMood(item.mood || 'Dramatic');
-    setDuration(item.duration || 5);
-    setMotionLevel(item.motionLevel ?? 70);
-    setAspectRatio(item.aspectRatio || '16:9');
-    setPlatform(item.platform || 'YouTube');
-    setBudgetMode(Boolean(item.budgetMode));
-    if (item.workflowCase) setWorkflowCase(item.workflowCase);
-  }, []);
-
-  // ── Prompt architecture click → switch to prompts tab ──
-  const handlePromptTagClick = (label: string) => {
-    setActiveTab('prompts');
-    const sectionMap: Record<string, string> = {
-      'Cinematic Style': 'style',
-      'Camera Direction': 'camera',
-      'Subject Consistency': 'system',
-      'Motion Guidance': 'motion',
-      'Lighting Control': 'style',
-    };
-    window.setTimeout(() => {
-      document
-        .querySelector(`[data-prompt-section="${sectionMap[label] || 'style'}"]`)
-        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 120);
-  };
+  const selectedWorkflow = workflowCase ? getCaseInfo(workflowCase) : null;
+  const storyboardPromptText = builtPrompts.map((prompt, idx) => (
+    `Scene ${idx + 1}\nSYSTEM: ${prompt.system}\nSTYLE: ${prompt.style}\nCAMERA: ${prompt.camera}\nMOTION: ${prompt.motion}\nNEGATIVE: ${negativePrompt || prompt.negative}`
+  )).join('\n\n---\n\n');
+  const seedancePromptText = builtPrompts.map((prompt, idx) => `Scene ${idx + 1}: ${prompt.seedance || ''}`).join('\n\n');
 
   const getProvider = (providerId: ProviderId) =>
     PROVIDERS.find((provider) => provider.id === providerId) || PROVIDERS[0];
+
+  const handleSelectWorkflow = (caseId: WorkflowCase) => {
+    setWorkflowCase(caseId);
+    setScenes([]);
+    setSelectedImages({});
+    setOutputTab('storyboard');
+  };
 
   const handleImageProviderChange = (providerId: ProviderId) => {
     const provider = getProvider(providerId);
@@ -464,435 +116,316 @@ function App() {
     setVideoModel(provider.videoModels[0]?.id || '');
   };
 
+  const panelPreview = (caseId: WorkflowCase) => {
+    const info = getCaseInfo(caseId);
+    const columns = caseId === 'case10' || caseId === 'case19' ? 4 : 3;
+    return (
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
+        {Array.from({ length: info.panels }).map((_, idx) => (
+          <div key={`${caseId}-${idx}`} className="aspect-video rounded bg-white/[0.06] ring-1 ring-white/[0.04]" />
+        ))}
+      </div>
+    );
+  };
+
+  const handleGenerateWorkflow = () => {
+    if (!selectedWorkflow || !workflowCase) return;
+
+    const panelCount = selectedWorkflow.panels;
+    const generatedScenes: Scene[] = Array.from({ length: panelCount }).map((_, idx) => {
+      const beatLabel = idx === 0 ? 'Opening beat' : idx === panelCount - 1 ? 'Closing beat' : `Beat ${idx + 1}`;
+      const promptParts = [
+        `${beatLabel}: ${storyIdea || 'Untitled storyboard idea'}`,
+        subject ? `Subject: ${subject}` : '',
+        environment ? `Setting: ${environment}` : '',
+        `Visual style: ${artStyle}`,
+        `Mood: ${mood}`,
+        `Language: ${language}`,
+        `Output format: ${outputFormatSetting}`,
+        `Detail level: ${detailLevel}`,
+        cinematicStylePrompt ? `Cinematic style prompt: ${cinematicStylePrompt}` : '',
+        cameraPrompt ? `Camera prompt: ${cameraPrompt}` : '',
+        motionPrompt ? `Motion prompt: ${motionPrompt}` : '',
+        additionalInstruction ? `Additional instruction: ${additionalInstruction}` : '',
+      ].filter(Boolean);
+
+      return {
+        id: `scene-${idx + 1}`,
+        description: `${beatLabel} for ${subject || 'the subject'} in ${environment || 'the selected setting'}`,
+        prompt: promptParts.join('. '),
+      };
+    });
+
+    setScenes(generatedScenes);
+    setSelectedImages(Object.fromEntries(generatedScenes.map((scene) => [scene.id, true])));
+    setOutputTab('storyboard');
+
+    saveWorkflowToHistory({
+      title: storyIdea.slice(0, 40) || selectedWorkflow.title,
+      storyIdea,
+      subject,
+      environment,
+      artStyle,
+      workflowCase,
+      mood,
+      duration,
+      motionLevel,
+      aspectRatio,
+      platform,
+      budgetMode,
+    });
+  };
+
+  const toggleImageSelect = (id: string) => setSelectedImages((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const handlePromptTagClick = (label: string) => {
+    setOutputTab('storyboard');
+    const sectionMap: Record<string, string> = {
+      'Cinematic Style': 'style',
+      'Camera Direction': 'camera',
+      'Subject Consistency': 'system',
+      'Motion Guidance': 'motion',
+      'Lighting Control': 'style',
+    };
+    window.setTimeout(() => {
+      document.querySelector(`[data-prompt-section="${sectionMap[label] || 'style'}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
+  };
+
+  const handleLoadCSV = (csv: string) => {
+    const lines = csv.trim().split('\n');
+    if (lines.length < 2) return;
+    setBatchQueue(lines.slice(1).map((line, idx) => ({
+      id: `batch-${idx + 1}`,
+      story: line.split(',')[0] || `Story ${idx + 1}`,
+      scenes: selectedWorkflow?.panels || 6,
+      style: artStyle,
+      status: 'pending',
+      images: [],
+      videos: [],
+    })));
+  };
+
+  const stats: AnalyticsStats = {
+    totalImages: 0,
+    totalVideos: 0,
+    successfulImages: 0,
+    successfulVideos: 0,
+    failedImages: 0,
+    failedVideos: 0,
+    totalCost: 0,
+    batchJobs: 0,
+    lastUpdated: Date.now(),
+  };
+  const jobHistory: JobEntry[] = [];
+
   return (
-    <div className="min-h-screen bg-[#090a10]">
-      {/* Background glow */}
-      <div className="fixed inset-0 pointer-events-none" style={{
-        background: 'radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.18) 0%, rgba(37,99,235,0.08) 32%, transparent 70%)'
-      }} />
+    <div className="min-h-screen bg-[#090a10] text-white">
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,0.18),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(37,99,235,0.10),transparent_30%)]" />
 
-      {/* ── Header ── */}
       <header className="relative z-10 border-b border-white/[0.06] bg-black/20 backdrop-blur-xl">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
-              <Sparkles size={16} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-sm font-bold text-white leading-tight">Storyboard SaaS</h1>
-              <div className="text-[10px] text-violet-300 font-medium">AI cinematic workflow engine</div>
-            </div>
+        <div className="mx-auto flex max-w-[1480px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="min-w-0">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300">Storyboard-to-Video AI</div>
+            <h1 className="truncate text-lg font-semibold sm:text-xl">Workflow-first cinematic generator</h1>
           </div>
-
-          <div className="flex items-center gap-3">
-            {/* Mode switch */}
-            <div className="glass-panel flex p-0.5">
-              {(['creator', 'production'] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMode(m)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                    mode === m ? 'bg-violet-500/20 text-violet-300' : 'text-gray-500 hover:text-gray-300'
-                  }`}
-                >
-                  {m === 'creator' ? 'Creator' : 'Production'}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-1">
-              <button className="btn-ghost text-xs" onClick={() => setShowBatch(true)}><Upload size={12} /> Batch</button>
-              <button className="btn-ghost text-xs hidden sm:flex" onClick={() => setShowAnalytics(true)}><BarChart2 size={12} /> Analytics</button>
-              <button className="btn-ghost text-xs" onClick={() => setShowSettings(true)}><Settings2 size={12} /> Settings</button>
-            </div>
+          <div className="flex flex-shrink-0 items-center gap-2">
+            <button className="btn-ghost text-xs" onClick={() => setShowBatch(true)}><Upload size={13} /> Batch</button>
+            <button className="btn-ghost text-xs" onClick={() => setShowSettings(true)}><Settings2 size={13} /> Settings</button>
           </div>
         </div>
       </header>
 
-      {/* Compact cinematic hero */}
-      <section className="relative z-10 border-b border-white/[0.04]">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-5">
-          <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] px-5 py-5 backdrop-blur-2xl">
-            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_0%,rgba(124,58,237,0.22),transparent_36%),radial-gradient(circle_at_80%_20%,rgba(59,130,246,0.16),transparent_34%)]" />
-            <div className="relative flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <div className="badge-violet mb-3 w-fit text-[10px]">Storyboard Techniques Only</div>
-                <h2 className="text-2xl sm:text-3xl font-semibold tracking-normal text-white">Storyboard-to-Video AI</h2>
-                <p className="mt-2 max-w-2xl text-sm text-gray-400">
-                  Generate storyboard workflows, GPT Image prompts, and Seedance animation prompts automatically.
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-[10px] text-gray-400 lg:w-[360px]">
-                <div className="rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-2">
-                  <div className="text-violet-200 font-semibold">Strategy</div>
-                  <div>AI workflow match</div>
-                </div>
-                <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2">
-                  <div className="text-blue-200 font-semibold">Storyboard</div>
-                  <div>Panel system</div>
-                </div>
-                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
-                  <div className="text-emerald-200 font-semibold">Motion</div>
-                  <div>Seedance ready</div>
-                </div>
-              </div>
-            </div>
+      <main className="relative z-10 mx-auto grid max-w-[1480px] grid-cols-1 gap-4 px-4 py-5 sm:px-6 xl:grid-cols-[300px_minmax(420px,1fr)_minmax(420px,1fr)]">
+        <section className="glass-panel p-4">
+          <div className="mb-4">
+            <div className="section-label mb-1">Step 1</div>
+            <h2 className="text-base font-semibold">Choose Workflow</h2>
+            <p className="mt-1 text-xs text-gray-500">Start by selecting one storyboard structure.</p>
           </div>
-        </div>
-      </section>
-
-      {/* ── Main Layout ── */}
-      <div className="relative z-10 max-w-[1440px] mx-auto px-4 sm:px-6 py-5 flex flex-col lg:flex-row gap-6"
-        style={{ minHeight: 'calc(100vh - 190px)' }}
-      >
-        {/* ═══ LEFT PANEL (35%) ═══ */}
-        <div className="order-2 w-full space-y-3 lg:order-1 lg:w-[35%]">
-          {/* Recent Workflows */}
-          <RecentWorkflows items={recentWorkflows} onLoad={loadWorkflow} />
-
-          {/* Case Selector */}
-          <CaseTemplateCard selected={workflowCase} onSelect={setWorkflowCase} />
-
-          {/* ── ACCORDION SECTIONS ── */}
-          <AccordionSection title="Scene Concept" defaultOpen={true}>
-            <div>
-              <label className="text-[10px] text-gray-500 mb-1 block">Video Idea</label>
-              <textarea
-                className="input-field min-h-[56px] text-xs resize-none"
-                placeholder="Describe your story idea..."
-                value={storyIdea}
-                onChange={(e) => setStoryIdea(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] text-gray-500 mb-1 block">Subject</label>
-                <input className="input-field text-xs" placeholder="e.g. A dancer"
-                  value={subject} onChange={(e) => setSubject(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500 mb-1 block">Environment</label>
-                <input className="input-field text-xs" placeholder="e.g. Snowy forest"
-                  value={environment} onChange={(e) => setEnvironment(e.target.value)} />
-              </div>
-            </div>
-            <div className="flex gap-1.5 pt-1">
-              {(['full', 'images', 'videos'] as const).map((wm) => (
-                <button
-                  key={wm}
-                  onClick={() => setWorkflowMode(wm)}
-                  className={`flex-1 py-1.5 text-[10px] font-medium rounded-lg transition-all ${
-                    workflowMode === wm
-                      ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
-                      : 'bg-white/[0.03] text-gray-500 border border-white/[0.06]'
-                  }`}
-                >
-                  {wm === 'full' ? '🎬 Full' : wm === 'images' ? '🖼️ Images' : '🎥 Video'}
-                </button>
-              ))}
-            </div>
-          </AccordionSection>
-
-          <AccordionSection title="Cinematic Style" defaultOpen={true}>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] text-gray-500 mb-1 block">Mood</label>
-                <select className="select-field text-xs" value={mood} onChange={e => setMood(e.target.value)}>
-                  <option>Dramatic</option><option>Joyful</option><option>Mysterious</option>
-                  <option>Melancholic</option><option>Energetic</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500 mb-1 block">Visual Style</label>
-                <select className="select-field text-xs" value={artStyle} onChange={e => setArtStyle(e.target.value)}>
-                  <option>Cinematic</option><option>Anime</option><option>Realistic</option><option>Abstract</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] text-gray-500 mb-1 flex justify-between">
-                <span>Motion Level</span><span className="text-violet-400">{motionLevel}%</span>
-              </label>
-              <input type="range" min="0" max="100" value={motionLevel} onChange={e => setMotionLevel(Number(e.target.value))} />
-            </div>
-            <div>
-              <label className="text-[10px] text-gray-500 mb-1 flex justify-between">
-                <span>Scenes</span><span className="text-violet-400">{numScenes}</span>
-              </label>
-              <input type="range" min="3" max="10" value={numScenes} onChange={e => setNumScenes(Number(e.target.value))} />
-            </div>
-          </AccordionSection>
-
-          <AccordionSection title="Production" defaultOpen={true}>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] text-gray-500 mb-1 block">Duration</label>
-                <select className="select-field text-xs" value={duration} onChange={e => setDuration(Number(e.target.value))}>
-                  <option value={3}>3s</option><option value={5}>5s</option><option value={8}>8s</option><option value={10}>10s</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500 mb-1 block">Aspect</label>
-                <select className="select-field text-xs" value={aspectRatio} onChange={e => setAspectRatio(e.target.value as any)}>
-                  <option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option>
-                </select>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] text-gray-500 mb-1 block">Platform</label>
-                <select className="select-field text-xs" value={platform} onChange={e => setPlatform(e.target.value)}>
-                  <option>YouTube</option><option>TikTok</option><option>Instagram</option><option>Web</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-500 mb-1 block">Image Provider</label>
-                <select className="select-field text-xs" value={imageProvider} onChange={e => handleImageProviderChange(e.target.value as ProviderId)}>
-                  {PROVIDERS.map(provider => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] text-gray-500 mb-1 block">Image Model</label>
-              {imageProvider === 'custom' ? (
-                <input className="input-field text-xs" value={imageModel} onChange={e => setImageModel(e.target.value)} placeholder="provider/model or version id" />
-              ) : (
-                <select className="select-field text-xs" value={imageModel} onChange={e => setImageModel(e.target.value)}>
-                  {getProvider(imageProvider).imageModels.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
-                </select>
-              )}
-            </div>
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/10">
-              <div className="flex items-center gap-2">
-                <Zap size={12} className="text-amber-400" />
-                <span className="text-xs text-gray-300">Budget Mode</span>
-              </div>
-              <button onClick={() => setBudgetMode(!budgetMode)}
-                className={`w-9 h-5 rounded-full transition-all ${budgetMode ? 'bg-amber-500' : 'bg-white/[0.1]'} relative`}>
-                <div className={`w-3 h-3 rounded-full bg-white absolute top-1 transition-all ${budgetMode ? 'left-5' : 'left-1'}`} />
+          <div className="space-y-2">
+            {WORKFLOW_CASES.map((workflow) => (
+              <button
+                key={workflow.id}
+                type="button"
+                onClick={() => handleSelectWorkflow(workflow.id)}
+                className={`w-full rounded-xl border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 ${
+                  workflowCase === workflow.id
+                    ? 'border-violet-400/45 bg-violet-500/12 shadow-[0_0_22px_rgba(124,58,237,0.16)]'
+                    : 'border-white/[0.07] bg-white/[0.025] hover:border-white/[0.16]'
+                }`}
+              >
+                <div className="mb-2">{panelPreview(workflow.id)}</div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold leading-snug text-white">{workflow.title}</div>
+                    <div className="mt-1 text-[11px] text-gray-500">{workflow.panels} panels</div>
+                  </div>
+                  {workflowCase === workflow.id && <CheckCircle2 size={16} className="mt-0.5 flex-shrink-0 text-emerald-300" />}
+                </div>
+                <div className="mt-2 text-[11px] leading-relaxed text-gray-400">{workflow.description}</div>
               </button>
-            </div>
-          </AccordionSection>
-
-          {/* ── STICKY GENERATE BUTTON ── */}
-          <div className="sticky bottom-4 pt-2">
-            <button
-              className="group relative min-h-[48px] w-full overflow-hidden rounded-xl px-4 py-3 text-sm font-semibold text-white
-                bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600
-                hover:from-violet-500 hover:via-indigo-500 hover:to-blue-500
-                disabled:opacity-40 disabled:cursor-not-allowed
-                transition-[background,box-shadow,opacity] duration-300 shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40
-                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0f]"
-              onClick={handleGenerateStoryboard}
-              disabled={isProcessing || !storyIdea.trim()}
-            >
-              {/* Shimmer overlay */}
-              <div className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000
-                bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-              <div className="relative flex items-center justify-center gap-2">
-                {isProcessing ? (
-                  <><Loader2 size={15} className="animate-spin" /> Generating Storyboard…</>
-                ) : scenes.length > 0 ? (
-                  <><Sparkles size={15} /> Regenerate Storyboard</>
-                ) : (
-                  <><Sparkles size={15} /> Generate Storyboard</>
-                )}
-              </div>
-            </button>
-            {isProcessing && (
-              <div className="mt-2 w-full h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-violet-500 via-indigo-500 to-blue-500 rounded-full transition-all duration-300"
-                  style={{ width: `${progress}%` }} />
-              </div>
-            )}
+            ))}
           </div>
-        </div>
+        </section>
 
-        {/* ═══ RIGHT PANEL (65%) ═══ */}
-        <div className="order-1 min-w-0 flex-1 space-y-4 lg:order-2">
-          <TabBar active={activeTab} onChange={setActiveTab} />
+        <section className="glass-panel p-4">
+          {selectedWorkflow ? (
+            <>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <div className="section-label mb-1">Steps 2-4</div>
+                  <h2 className="text-base font-semibold">Enter Idea & Settings</h2>
+                  <p className="mt-1 text-xs text-gray-500">Only the fields needed to generate this workflow.</p>
+                </div>
+                <div className="badge-violet text-[10px]">{selectedWorkflow.panels} panels</div>
+              </div>
 
-          {/* ── STORYBOARD TAB ── */}
-          {activeTab === 'storyboard' && (
-            <div id="panel-storyboard" role="tabpanel" aria-labelledby="tab-storyboard" className="space-y-4">
-              {/* Storyboard Preview */}
-              <StoryboardPreview
-                scenes={scenes}
-                caseId={workflowCase}
-                selectedImages={selectedImages}
-                onToggleSelect={toggleImageSelect}
-                isGenerating={isProcessing}
-                generationProgress={progress}
-              />
-
-              {/* Final Video Plan */}
-              <FinalVideoPlan
-                caseId={workflowCase}
-                numScenes={numScenes}
-                duration={duration}
-                aspectRatio={aspectRatio}
-                motionLevel={motionLevel}
-                hasImages={scenes.some(s => s.imageUrl)}
-              />
-
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                <WorkflowPipeline currentStep={currentStep} />
-                <div className="xl:col-span-2 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <AIReasoningPanel result={aiAnalysis} caseId={workflowCase} />
-                    <RenderSafetyPanel results={safetyResults} />
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1 block text-[11px] font-medium text-gray-400">Main idea</label>
+                  <textarea className="input-field min-h-[92px] resize-none text-sm" value={storyIdea} onChange={(event) => setStoryIdea(event.target.value)} placeholder="Describe the video idea..." />
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-gray-400">Subject</label>
+                    <input className="input-field text-sm" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Main character or product" />
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <PromptArchitecturePanel onTagClick={handlePromptTagClick} />
-                    <div className="glass-panel p-4" />
+                  <div>
+                    <label className="mb-1 block text-[11px] font-medium text-gray-400">Setting / Environment</label>
+                    <input className="input-field text-sm" value={environment} onChange={(event) => setEnvironment(event.target.value)} placeholder="Location and atmosphere" />
                   </div>
                 </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <select className="select-field text-sm" value={artStyle} onChange={(event) => setArtStyle(event.target.value)} aria-label="Visual style">
+                    <option>Cinematic</option><option>Anime</option><option>Realistic</option><option>Abstract</option>
+                  </select>
+                  <select className="select-field text-sm" value={mood} onChange={(event) => setMood(event.target.value)} aria-label="Mood">
+                    <option>Dramatic</option><option>Joyful</option><option>Mysterious</option><option>Melancholic</option><option>Energetic</option>
+                  </select>
+                  <input className="input-field text-sm" type="number" min={3} max={60} value={duration} onChange={(event) => setDuration(Number(event.target.value))} aria-label="Duration" />
+                  <select className="select-field text-sm" value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as '16:9' | '9:16' | '1:1')} aria-label="Aspect ratio">
+                    <option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option>
+                  </select>
+                  <select className="select-field text-sm" value={platform} onChange={(event) => setPlatform(event.target.value)} aria-label="Platform">
+                    <option>YouTube</option><option>TikTok</option><option>Instagram</option><option>Web</option>
+                  </select>
+                  <select className="select-field text-sm" value={detailLevel} onChange={(event) => setDetailLevel(event.target.value)} aria-label="Detail level">
+                    <option>Concise</option><option>Detailed</option><option>Production-grade</option>
+                  </select>
+                </div>
+
+                <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-3">
+                  <div className="mb-3 text-xs font-semibold text-white">Prompt Details</div>
+                  <div className="space-y-3">
+                    <input className="input-field text-sm" value={cinematicStylePrompt} onChange={(event) => setCinematicStylePrompt(event.target.value)} placeholder="Cinematic style prompt" />
+                    <input className="input-field text-sm" value={cameraPrompt} onChange={(event) => setCameraPrompt(event.target.value)} placeholder="Camera prompt" />
+                    <input className="input-field text-sm" value={motionPrompt} onChange={(event) => setMotionPrompt(event.target.value)} placeholder="Motion prompt" />
+                    <input className="input-field text-sm" value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} placeholder="Negative prompt" />
+                    <textarea className="input-field min-h-[72px] resize-none text-sm" value={additionalInstruction} onChange={(event) => setAdditionalInstruction(event.target.value)} placeholder="Additional instruction" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <select className="select-field text-sm" value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="Language">
+                    <option>English</option><option>Vietnamese</option><option>Japanese</option><option>Korean</option>
+                  </select>
+                  <select className="select-field text-sm" value={outputFormatSetting} onChange={(event) => setOutputFormatSetting(event.target.value)} aria-label="Output format">
+                    <option>Prompt Pack</option><option>Markdown Workflow</option><option>JSON</option><option>Production Brief</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setGenerateShotlist(!generateShotlist)} className={`rounded-lg border px-3 py-2 text-xs ${generateShotlist ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-white/[0.07] text-gray-500'}`}>Shotlist {generateShotlist ? 'On' : 'Off'}</button>
+                  <button type="button" onClick={() => setGenerateSeedancePrompt(!generateSeedancePrompt)} className={`rounded-lg border px-3 py-2 text-xs ${generateSeedancePrompt ? 'border-violet-500/30 bg-violet-500/10 text-violet-200' : 'border-white/[0.07] text-gray-500'}`}>Seedance {generateSeedancePrompt ? 'On' : 'Off'}</button>
+                </div>
+
+                <button className="btn-primary min-h-[48px] w-full" onClick={handleGenerateWorkflow} disabled={!storyIdea.trim()}>
+                  <Sparkles size={15} /> Generate Workflow
+                </button>
               </div>
+            </>
+          ) : (
+            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] p-6 text-center">
+              <Sparkles size={22} className="mb-3 text-violet-300" />
+              <h2 className="text-base font-semibold">Choose a workflow first</h2>
+              <p className="mt-2 max-w-xs text-xs leading-relaxed text-gray-500">Select one of the four storyboard cases to reveal the focused generator form.</p>
             </div>
           )}
+        </section>
 
-          {/* ── VIDEO MOTION TAB ── */}
-          {activeTab === 'video-motion' && (
-            <div id="panel-video-motion" role="tabpanel" aria-labelledby="tab-video-motion" className="space-y-4">
+        <section className="space-y-4">
+          {scenes.length > 0 && workflowCase ? (
+            <>
               <div className="glass-panel p-4">
-                <div className="section-label mb-3">Animation Motion</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Video Provider</label>
-                    <select className="select-field text-xs" value={videoProvider} onChange={e => handleVideoProviderChange(e.target.value as ProviderId)}>
-                      {PROVIDERS.map(provider => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
-                    </select>
+                    <div className="section-label mb-1">Step 5</div>
+                    <h2 className="text-base font-semibold">Generated Output</h2>
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Dance Style</label>
-                    <select className="select-field text-xs" value={danceStyle} onChange={e => setDanceStyle(e.target.value)}>
-                      <option>Smooth / Cinematic</option><option>Hip Hop</option><option>Ballet</option><option>Freestyle</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <label className="text-xs text-gray-400 mb-1 block">Video Model</label>
-                  {videoProvider === 'custom' ? (
-                    <input className="input-field text-xs" value={videoModel} onChange={e => setVideoModel(e.target.value)} placeholder="provider/model or version id" />
-                  ) : (
-                    <select className="select-field text-xs" value={videoModel} onChange={e => setVideoModel(e.target.value)}>
-                      {getProvider(videoProvider).videoModels.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
-                    </select>
-                  )}
-                </div>
-                <div className="mt-3">
-                  <label className="text-xs text-gray-400 mb-1 flex justify-between">
-                    <span>Motion Intensity</span><span className="text-violet-400">{motionIntensity}%</span>
-                  </label>
-                  <input type="range" min="0" max="100" value={motionIntensity} onChange={e => setMotionIntensity(Number(e.target.value))} />
-                </div>
-              </div>
-
-              <div className="glass-panel p-4">
-                <div className="section-label mb-3 flex items-center gap-2"><Sparkles size={12} /> Curated Prompts</div>
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {getCategories().map(cat => (
-                    <button key={cat} onClick={() => { setPromptCategory(cat); setSelectedPrompt(null); }}
-                      className={`px-2.5 py-1 text-[10px] font-medium rounded-full transition-all ${
-                        promptCategory === cat
-                          ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
-                          : 'bg-white/[0.03] text-gray-500 border border-white/[0.06]'
-                      }`}>
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-                <div className="max-h-40 overflow-y-auto custom-scrollbar space-y-1">
-                  {getPromptsByCategory(promptCategory).map(p => (
-                    <button key={p.id} onClick={() => setSelectedPrompt(p)}
-                      className={`w-full text-left p-2 rounded-lg text-xs transition-all ${
-                        selectedPrompt?.id === p.id
-                          ? 'bg-violet-500/20 border border-violet-500/30'
-                          : 'bg-white/[0.02] border border-white/[0.04]'
-                      }`}>
-                      <div className="font-medium text-white">{p.name}</div>
-                      <div className="text-[9px] text-gray-500">{p.category} — {p.author}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="glass-panel p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="section-label mb-0">Background Audio</div>
-                  <button onClick={() => setAddMusic(!addMusic)}
-                    className={`w-9 h-5 rounded-full transition-all ${addMusic ? 'bg-violet-500' : 'bg-white/[0.1]'} relative`}>
-                    <div className={`w-3 h-3 rounded-full bg-white absolute top-1 transition-all ${addMusic ? 'left-5' : 'left-1'}`} />
+                  <button className="btn-ghost text-xs" onClick={() => navigator.clipboard?.writeText(outputTab === 'seedance' ? seedancePromptText : storyboardPromptText)}>
+                    <Copy size={13} /> Copy
                   </button>
                 </div>
-                {addMusic ? (
-                  <div className="border-2 border-dashed border-white/[0.08] rounded-lg p-6 text-center cursor-pointer hover:border-violet-500/30">
-                    <Upload className="mx-auto mb-2 text-gray-500" size={20} />
-                    <p className="text-xs text-gray-400">Upload Background Music</p>
-                    <p className="text-[10px] text-gray-500 mt-1">MP3, WAV up to 10MB</p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-gray-500 text-center py-3">Audio disabled</p>
-                )}
-              </div>
 
-              <button className="btn-primary w-full py-3" onClick={handleGenerateVideos}
-                disabled={isProcessing || Object.values(selectedImages).filter(Boolean).length === 0}>
-                {isProcessing ? <><Loader2 size={14} className="animate-spin" /> Generating Videos…</>
-                  : <><Play size={14} /> Generate Videos</>}
-              </button>
-            </div>
-          )}
+                <StoryboardPreview scenes={scenes} caseId={workflowCase} selectedImages={selectedImages} onToggleSelect={toggleImageSelect} isGenerating={false} generationProgress={100} />
 
-          {/* ── SHOTLIST TAB ── */}
-          {activeTab === 'shotlist' && (
-            <div id="panel-shotlist" role="tabpanel" aria-labelledby="tab-shotlist" className="glass-panel p-4">
-              <div className="section-label mb-3">Shot List</div>
-              {scenes.filter(s => selectedImages[s.id]).length > 0 ? (
-                <div className="space-y-2">
-                  {scenes.filter(s => selectedImages[s.id]).map((scene, idx) => (
-                    <div key={scene.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
-                      <div className="w-14 aspect-video rounded-md overflow-hidden bg-white/[0.03] flex-shrink-0">
-                        {scene.imageUrl ? <img src={scene.imageUrl} className="w-full h-full object-cover" /> : (
-                          <div className="w-full h-full flex items-center justify-center"><ImageIcon size={14} className="text-gray-500" /></div>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-medium text-white">Shot {idx + 1}</div>
-                        <div className="text-[9px] text-gray-500 truncate">{scene.prompt?.slice(0, 80) || 'No prompt'}</div>
-                      </div>
-                      <div className="text-[10px] text-gray-500 flex-shrink-0">4.0s</div>
-                    </div>
+                <div className="mt-4 flex gap-1 overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.025] p-1 custom-scrollbar">
+                  {[
+                    ['storyboard', 'Storyboard Prompt'],
+                    ['seedance', 'Seedance Prompt'],
+                    ['shotlist', 'Shotlist'],
+                    ['export', 'Export'],
+                  ].map(([id, label]) => (
+                    <button key={id} type="button" onClick={() => setOutputTab(id as OutputTab)} className={`min-h-9 flex-shrink-0 rounded-lg px-3 text-xs transition-all ${outputTab === id ? 'bg-violet-500/20 text-white' : 'text-gray-500 hover:text-white'}`}>
+                      {label}
+                    </button>
                   ))}
                 </div>
-              ) : <div className="text-xs text-gray-500 text-center py-8">Generate to see shot list</div>}
+
+                <div className="mt-4">
+                  {outputTab === 'storyboard' && <PromptOutputPanel prompts={builtPrompts} />}
+                  {outputTab === 'seedance' && (
+                    <div className="rounded-xl border border-white/[0.06] bg-black/25 p-3">
+                      <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-gray-300">{generateSeedancePrompt ? seedancePromptText || 'Generate Workflow to create Seedance prompts.' : 'Seedance prompt generation is disabled in settings.'}</pre>
+                    </div>
+                  )}
+                  {outputTab === 'shotlist' && (
+                    <div className="space-y-2">
+                      {generateShotlist ? scenes.map((scene, idx) => (
+                        <div key={scene.id} className="rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
+                          <div className="text-xs font-semibold text-white">Shot {idx + 1}</div>
+                          <div className="mt-1 text-[11px] leading-relaxed text-gray-400">{scene.prompt}</div>
+                        </div>
+                      )) : <div className="rounded-xl border border-white/[0.06] p-6 text-center text-xs text-gray-500">Shotlist generation is disabled in settings.</div>}
+                    </div>
+                  )}
+                  {outputTab === 'export' && (
+                    <ExportPanel scenes={scenes} storyIdea={storyIdea} artStyle={artStyle} imageModel={imageModel} videoModel={videoModel} />
+                  )}
+                </div>
+              </div>
+
+              <AccordionSection title="Advanced" defaultOpen={false}>
+                <div className="grid grid-cols-1 gap-3">
+                  <AIReasoningPanel result={aiAnalysis} caseId={workflowCase} />
+                  <RenderSafetyPanel results={safetyResults} />
+                  <WorkflowPipeline currentStep={2} />
+                  <PromptArchitecturePanel onTagClick={handlePromptTagClick} />
+                </div>
+              </AccordionSection>
+            </>
+          ) : (
+            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] p-6 text-center">
+              <Copy size={20} className="mb-3 text-gray-500" />
+              <h2 className="text-base font-semibold text-gray-300">Output appears after Generate</h2>
+              <p className="mt-2 max-w-xs text-xs leading-relaxed text-gray-500">Storyboard prompt, Seedance prompt, shotlist, and export controls stay hidden until a workflow is generated.</p>
             </div>
           )}
+        </section>
+      </main>
 
-          {/* ── PROMPTS TAB ── */}
-          {activeTab === 'prompts' && (
-            <div id="panel-prompts" role="tabpanel" aria-labelledby="tab-prompts">
-              <PromptOutputPanel prompts={builtPrompts} />
-            </div>
-          )}
-
-          {/* ── EXPORT TAB ── */}
-          {activeTab === 'export' && (
-            <div id="panel-export" role="tabpanel" aria-labelledby="tab-export">
-              <ExportPanel
-                scenes={scenes.filter(s => selectedImages[s.id])}
-                storyIdea={storyIdea}
-                artStyle={artStyle}
-                imageModel={imageModel}
-                videoModel={videoModel}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Modals */}
       {showSettings && (
         <SettingsModal client={apiClient} onClose={() => setShowSettings(false)}
           imageProvider={imageProvider} videoProvider={videoProvider}
@@ -900,15 +433,11 @@ function App() {
           onImageProviderChange={handleImageProviderChange} onVideoProviderChange={handleVideoProviderChange}
           onImageModelChange={setImageModel} onVideoModelChange={setVideoModel} />
       )}
-      {showAnalytics && (
-        <AnalyticsModal stats={stats} jobHistory={jobHistory}
-          onClose={() => setShowAnalytics(false)} onClear={clearStats} />
-      )}
       <BatchModal show={showBatch} onClose={() => setShowBatch(false)}
         batchQueue={batchQueue} batchProcessing={batchProcessing} batchCurrentIndex={batchCurrentIndex}
-        onLoadCSV={handleLoadCSV} onRemove={handleRemoveFromBatch}
-        onStart={handleStartBatch} onClear={() => setBatchQueue([])}
-        onExport={() => alert('Batch Complete!')} onCancel={handleCancelBatch} />
+        onLoadCSV={handleLoadCSV} onRemove={(id) => setBatchQueue((prev) => prev.filter((item) => item.id !== id))}
+        onStart={() => setBatchProcessing(false)} onClear={() => setBatchQueue([])}
+        onExport={() => alert('Batch Complete!')} onCancel={() => setBatchProcessing(false)} />
     </div>
   );
 }
