@@ -9,6 +9,52 @@ const gridConfig: Record<WorkflowCase, { cols: number; rows: number; label: stri
   case19: { cols: 4, rows: 2, label: '8 Panel Editorial', panels: 8 },
 };
 
+const shotMetadata: Record<WorkflowCase, Array<{ shotType: string; camera: string; beat: string }>> = {
+  case1: [
+    { shotType: 'Wide', camera: 'Static drift', beat: 'Setup' },
+    { shotType: 'Medium', camera: 'Push-in', beat: 'Subject' },
+    { shotType: 'OTS', camera: 'Pan', beat: 'Context' },
+    { shotType: 'Close', camera: 'Dolly-in', beat: 'Emotion' },
+    { shotType: 'Tracking', camera: 'Follow', beat: 'Action' },
+    { shotType: 'Hero', camera: 'Settle', beat: 'Payoff' },
+  ],
+  case2: [
+    { shotType: 'Grid W', camera: 'Anchor', beat: 'A1' },
+    { shotType: 'Grid M', camera: 'Match', beat: 'A2' },
+    { shotType: 'Insert', camera: 'Cut-in', beat: 'A3' },
+    { shotType: 'Track', camera: 'Lateral', beat: 'B1' },
+    { shotType: 'Center', camera: 'Lock', beat: 'B2' },
+    { shotType: 'Reverse', camera: 'Match', beat: 'B3' },
+    { shotType: 'Bridge', camera: 'Pan', beat: 'C1' },
+    { shotType: 'Cutaway', camera: 'Snap', beat: 'C2' },
+    { shotType: 'Resolve', camera: 'Hold', beat: 'C3' },
+  ],
+  case10: [
+    { shotType: 'Impact', camera: 'Punch-in', beat: 'Hit 01' },
+    { shotType: 'Close', camera: 'Snap', beat: 'Hit 02' },
+    { shotType: 'Insert', camera: 'Whip', beat: 'Hit 03' },
+    { shotType: 'Low', camera: 'Rise', beat: 'Hit 04' },
+    { shotType: 'Texture', camera: 'Cut', beat: 'Hit 05' },
+    { shotType: 'Push', camera: 'Drive', beat: 'Hit 06' },
+    { shotType: 'Top', camera: 'Drop', beat: 'Hit 07' },
+    { shotType: 'Track', camera: 'Run', beat: 'Hit 08' },
+    { shotType: 'React', camera: 'Crash', beat: 'Hit 09' },
+    { shotType: 'Blur', camera: 'Sweep', beat: 'Hit 10' },
+    { shotType: 'Flash', camera: 'Burst', beat: 'Hit 11' },
+    { shotType: 'Final', camera: 'Stop', beat: 'Hit 12' },
+  ],
+  case19: [
+    { shotType: 'Master', camera: 'Static', beat: 'Reuse 1' },
+    { shotType: 'Product', camera: 'Hold', beat: 'Reuse 2' },
+    { shotType: 'Medium', camera: 'Minimal', beat: 'Proof' },
+    { shotType: 'Detail', camera: 'Insert', beat: 'Value' },
+    { shotType: 'Variant', camera: 'Hold', beat: 'Reuse 3' },
+    { shotType: 'Pan', camera: 'Short', beat: 'Move' },
+    { shotType: 'Bridge', camera: 'Simple', beat: 'Transition' },
+    { shotType: 'Hero', camera: 'Stable', beat: 'CTA' },
+  ],
+};
+
 interface Props {
   scenes: Scene[];
   caseId: WorkflowCase;
@@ -40,6 +86,8 @@ export default function StoryboardPreview({
       : <ArrowRight size={10} aria-hidden="true" />;
   };
 
+  const getShotMeta = (idx: number) => shotMetadata[caseId][idx % shotMetadata[caseId].length];
+
   const renderPlaceholderPanel = (idx: number, variant: 'empty' | 'loading' | 'remaining' = 'empty') => (
     <motion.div
       key={`${variant}-${idx}`}
@@ -64,6 +112,9 @@ export default function StoryboardPreview({
       </div>
       <div className="absolute right-1 top-1 rounded bg-black/40 p-1 text-gray-500">
         {readOrderIcon(idx)}
+      </div>
+      <div className="absolute inset-x-1 bottom-5 hidden rounded bg-black/35 px-1.5 py-1 text-[7px] leading-tight text-gray-500 sm:block">
+        {getShotMeta(idx).shotType} / {getShotMeta(idx).camera}
       </div>
     </motion.div>
   );
@@ -126,6 +177,9 @@ export default function StoryboardPreview({
                 )}
                 <div className="absolute bottom-1 left-1 text-[8px] font-mono text-gray-500 bg-black/40 px-1 py-0.5 rounded">
                   S{i + 1}
+                </div>
+                <div className="absolute bottom-1 right-1 max-w-[62%] truncate rounded bg-black/40 px-1 py-0.5 text-[7px] text-gray-500">
+                  {getShotMeta(i).beat}
                 </div>
               </motion.div>
             );
@@ -198,6 +252,9 @@ export default function StoryboardPreview({
 
               <div className="absolute bottom-1 left-1">
                 <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold">S{idx + 1}</span>
+              </div>
+              <div className="absolute bottom-1 right-1 max-w-[64%] truncate rounded bg-black/60 px-1.5 py-0.5 text-[8px] text-gray-300">
+                {getShotMeta(idx).shotType} / {getShotMeta(idx).beat}
               </div>
               <div className="absolute right-1 top-1 rounded bg-black/45 p-1 text-white/50">
                 {readOrderIcon(idx)}

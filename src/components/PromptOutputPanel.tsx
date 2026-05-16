@@ -16,15 +16,39 @@ const sections: { key: keyof BuiltPrompt; label: string; desc: string; color: st
   { key: 'seedance', label: 'SEEDANCE PROMPT', desc: 'Animation motion guidance', color: 'border-amber-500/20 bg-amber-500/5' },
 ];
 
+const emptyPreviewContent: Partial<Record<keyof BuiltPrompt, string>> = {
+  system: 'Workflow-aware cinematic prompt engineer role, storyboard rules, panel count, and continuity requirements.',
+  style: 'Art style, mood, lighting, cinematic color grade, production texture, and storyboard-specific composition.',
+  camera: 'Shot type, lens language, camera movement, framing, depth of field, and read-order continuity.',
+  motion: 'Subject movement, camera motion, transition behavior, Seedance readiness, and temporal rhythm.',
+  negative: 'Low quality, blur, distortion, watermarks, text artifacts, continuity breaks, and unstable anatomy.',
+  seedance: 'Animation prompt with motion continuity, natural blur, cinematic atmosphere, and workflow-specific movement.',
+};
+
 export default function PromptOutputPanel({ prompts }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const copyText = (text: string) => navigator.clipboard?.writeText(text).catch(() => undefined);
 
   if (prompts.length === 0) {
     return (
-      <div className="glass-panel p-8 text-center">
-        <Sparkles size={24} className="mx-auto mb-3 text-gray-500" />
-        <p className="text-xs text-gray-500">Generate scenes to see segmented prompts</p>
+      <div className="glass-panel p-4">
+        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="section-label mb-1">Prompt Architecture Preview</div>
+            <p className="text-xs text-gray-500">Generate Storyboard to create prompt pack.</p>
+          </div>
+          <div className="badge-violet w-fit text-[10px]"><Sparkles size={10} /> Awaiting storyboard</div>
+        </div>
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          {sections.map((section) => (
+            <div key={section.key} className={`rounded-lg border p-3 ${section.color}`}>
+              <div className="text-[10px] font-semibold tracking-wider text-white/90">{section.label}</div>
+              <div className="mt-1 text-[10px] leading-relaxed text-gray-400">
+                {emptyPreviewContent[section.key]}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

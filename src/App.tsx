@@ -11,11 +11,12 @@ import type { SeedancePrompt } from './prompts/seedancePrompts';
 import { initApiClient, PROVIDERS } from './lib/api';
 import type { ProviderId } from './lib/api';
 import { getCategories, getPromptsByCategory } from './prompts/seedancePrompts';
-import { analyzeVideoProfile } from './lib/caseRouter';
+import { analyzeVideoProfile, selectWorkflowCase } from './lib/caseRouter';
 import { analyzeSafety } from './lib/safetyAnalyzer';
 import { buildAllPrompts } from './lib/promptBuilder';
 import { SAMPLE_WORKFLOWS, loadRecentWorkflows, saveWorkflowToHistory } from './lib/sampleWorkflows';
 import type { WorkflowHistoryItem } from './lib/sampleWorkflows';
+import { getCaseInfo } from './lib/workflowCases';
 
 import TabBar from './components/TabBar';
 import StoryboardPreview from './components/StoryboardPreview';
@@ -153,18 +154,14 @@ function App() {
 
   // ── Built prompts ──
   const builtPrompts = useMemo(() =>
-    buildAllPrompts(scenes.filter(s => selectedImages[s.id]), artStyle, mood),
-    [scenes, selectedImages, artStyle, mood]
+    buildAllPrompts(scenes.filter(s => selectedImages[s.id]), artStyle, mood, workflowCase),
+    [scenes, selectedImages, artStyle, mood, workflowCase]
   );
 
   // ── Update workflow case based on AI analysis ──
   useEffect(() => {
-    const analysis = aiAnalysis;
-    if (analysis.workflowMatch.includes('Case 1')) setWorkflowCase('case1');
-    else if (analysis.workflowMatch.includes('Case 2')) setWorkflowCase('case2');
-    else if (analysis.workflowMatch.includes('Case 10')) setWorkflowCase('case10');
-    else if (analysis.workflowMatch.includes('Case 19')) setWorkflowCase('case19');
-  }, [aiAnalysis]);
+    setWorkflowCase(selectWorkflowCase(motionLevel, duration, numScenes, budgetMode));
+  }, [motionLevel, duration, numScenes, budgetMode]);
 
   // ── Helpers ──
   const updateStats = (type: 'image' | 'video', success: boolean, provider: string) => {
@@ -311,9 +308,10 @@ function App() {
     }
     setIsProcessing(true);
     setGenerationStatus('scenes');
+    const panelCount = getCaseInfo(workflowCase).panels;
 
     setTimeout(() => {
-      const generatedScenes: Scene[] = Array.from({ length: numScenes }).map((_, i) => ({
+      const generatedScenes: Scene[] = Array.from({ length: panelCount }).map((_, i) => ({
         id: `scene-${i + 1}`, description: '', prompt: '',
       }));
       setScenes(generatedScenes);
@@ -331,7 +329,20 @@ function App() {
         setGenerationStatus('images');
 
         // Save to recent workflows
-        saveWorkflowToHistory({ title: storyIdea.slice(0, 40) || 'Untitled', storyIdea, subject, artStyle, workflowCase: workflowCase });
+        saveWorkflowToHistory({
+          title: storyIdea.slice(0, 40) || 'Untitled',
+          storyIdea,
+          subject,
+          environment,
+          artStyle,
+          workflowCase,
+          mood,
+          duration,
+          motionLevel,
+          aspectRatio,
+          platform,
+          budgetMode,
+        });
 
         if (workflowMode === 'full' || workflowMode === 'images') {
           handleGenerateImagesInternal(updatedScenes);
@@ -410,8 +421,15 @@ function App() {
   const loadWorkflow = useCallback((item: WorkflowHistoryItem) => {
     setStoryIdea(item.storyIdea);
     setSubject(item.subject || '');
+    setEnvironment(item.environment || '');
     setArtStyle(item.artStyle);
-    if (item.workflowCase) setWorkflowCase(item.workflowCase as WorkflowCase);
+    setMood(item.mood || 'Dramatic');
+    setDuration(item.duration || 5);
+    setMotionLevel(item.motionLevel ?? 70);
+    setAspectRatio(item.aspectRatio || '16:9');
+    setPlatform(item.platform || 'YouTube');
+    setBudgetMode(Boolean(item.budgetMode));
+    if (item.workflowCase) setWorkflowCase(item.workflowCase);
   }, []);
 
   // ── Prompt architecture click → switch to prompts tab ──

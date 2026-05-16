@@ -140,7 +140,7 @@ export function RenderSafety() {
   const items = [
     { label: 'Character consistency', status: 'safe' as const },
     { label: 'Motion complexity', status: 'safe' as const },
-    { label: 'Frame drift risk', status: 'warning' as const },
+    { label: 'Frame drift control', status: 'warning' as const },
     { label: 'Seedance compatibility', status: 'safe' as const },
     { label: 'Scene transition stability', status: 'safe' as const },
   ];
