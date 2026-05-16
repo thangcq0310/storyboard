@@ -19,6 +19,24 @@ export default function PromptArchitecturePanel({ onTagClick }: Props) {
       <div className="section-label mb-3 flex items-center gap-1.5">
         <Code size={12} /> Prompt Architecture
       </div>
+      <div className="mb-3 rounded-lg border border-white/[0.06] bg-black/20 p-2.5">
+        <div className="flex items-center gap-1.5 text-[10px] text-violet-200">
+          <Sparkles size={11} />
+          Cinematic prompt stack
+        </div>
+        <div className="mt-2 space-y-1">
+          {architectureItems.map((item, idx) => (
+            <button
+              key={`row-${item.label}`}
+              onClick={() => onTagClick(item.label)}
+              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[10px] text-gray-400 transition-colors hover:bg-white/[0.04] hover:text-white"
+            >
+              <span>{idx + 1}. {item.label}</span>
+              <span className="h-1.5 w-10 rounded-full bg-gradient-to-r from-violet-500/60 to-blue-500/20" />
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="flex flex-wrap gap-1.5">
         {architectureItems.map((item) => (
           <motion.button

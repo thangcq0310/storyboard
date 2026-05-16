@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Film, ImageIcon, Eye } from 'lucide-react';
+import { Film, ImageIcon, Eye, Play, Clapperboard } from 'lucide-react';
 import { Scene, WorkflowCase } from '../types';
 
 const gridConfig: Record<WorkflowCase, { cols: number; rows: number; label: string }> = {
@@ -29,6 +29,7 @@ export default function StoryboardPreview({
   const config = gridConfig[caseId];
   const totalPanels = config.cols * config.rows;
   const filledCount = Math.min(scenes.length, totalPanels);
+  const visibleScenes = scenes.slice(0, totalPanels);
 
   // Show placeholder grid when no scenes
   if (scenes.length === 0 && !isGenerating) {
@@ -116,14 +117,24 @@ export default function StoryboardPreview({
   if (scenes.length === 0) return null;
 
   return (
-    <div className="glass-panel p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="section-label mb-0">{config.label}</div>
-        <div className="badge-violet text-[10px]"><Eye size={10} /> Preview</div>
+    <div className="glass-panel p-4 border-violet-500/15 bg-white/[0.04]">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <div>
+          <div className="section-label mb-1 flex items-center gap-1.5">
+            <Clapperboard size={12} /> Storyboard Command View
+          </div>
+          <div className="text-sm font-semibold text-white">{config.label}</div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="badge-emerald text-[10px]"><Play size={10} /> Active sequence</div>
+          <div className="badge-violet text-[10px]"><Eye size={10} /> Live preview</div>
+        </div>
       </div>
 
-      <div className={`grid gap-1.5`} style={{ gridTemplateColumns: `repeat(${config.cols}, 1fr)` }}>
-        {scenes.slice(0, totalPanels).map((scene, idx) => (
+      <div className="relative overflow-hidden rounded-xl border border-white/[0.07] bg-black/20 p-3">
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_15%_0%,rgba(124,58,237,0.16),transparent_30%),radial-gradient(circle_at_85%_100%,rgba(16,185,129,0.08),transparent_30%)]" />
+        <div className={`relative grid gap-2`} style={{ gridTemplateColumns: `repeat(${config.cols}, 1fr)` }}>
+        {visibleScenes.map((scene, idx) => (
           <motion.div
             key={scene.id}
             initial={{ opacity: 0, scale: 0.9 }}
@@ -161,6 +172,29 @@ export default function StoryboardPreview({
         {scenes.length < totalPanels && Array.from({ length: totalPanels - scenes.length }).map((_, i) => (
           <div key={`rem-${i}`} className="aspect-video rounded-lg border border-white/[0.04] bg-white/[0.01]" />
         ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
+        {Array.from({ length: totalPanels }).map((_, idx) => {
+          const scene = visibleScenes[idx];
+          const isSelected = scene ? selectedImages[scene.id] : false;
+          return (
+            <button
+              key={`seq-${idx}`}
+              onClick={() => scene && onToggleSelect(scene.id)}
+              className={`h-8 min-w-[56px] rounded-md border text-[9px] font-mono transition-all ${
+                isSelected
+                  ? 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200'
+                  : scene
+                    ? 'border-white/[0.08] bg-white/[0.03] text-gray-400 hover:border-white/[0.18]'
+                    : 'border-white/[0.04] bg-white/[0.01] text-gray-600'
+              }`}
+            >
+              S{idx + 1}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

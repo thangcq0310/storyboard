@@ -1,18 +1,31 @@
-import { WorkflowCase, WorkflowCaseInfo } from '../types';
+import { WorkflowCase } from '../types';
 import { motion } from 'framer-motion';
-import { CheckCircle2, Zap, Shield, DollarSign, Sparkles } from 'lucide-react';
+import { CheckCircle2, Zap, Shield, DollarSign, Sparkles, Target, Film } from 'lucide-react';
 import { WORKFLOW_CASES } from '../lib/workflowCases';
 
 function MiniThumbnail({ panels, cols, rows }: { panels: number; cols: number; rows: number }) {
   const total = Math.min(panels, cols * rows);
   return (
-    <div className="grid gap-[1px]" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)` }}>
+    <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)` }}>
       {Array.from({ length: total }).map((_, i) => (
-        <div key={i} className="aspect-square rounded-sm bg-white/[0.06] relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/10 to-indigo-500/5" />
-          <span className="absolute bottom-[1px] right-[2px] text-[6px] text-gray-500 font-mono">{i + 1}</span>
+        <div key={i} className="aspect-video rounded-[4px] bg-white/[0.06] relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/20 via-indigo-500/10 to-blue-500/10" />
+          <div className="absolute inset-x-1 bottom-1 h-[2px] rounded bg-white/[0.08]" />
+          <span className="absolute top-[2px] left-[3px] text-[6px] text-white/40 font-mono">{i + 1}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function Metric({ icon: Icon, label, value, tone }: { icon: any; label: string; value?: number; tone: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.025] px-2.5 py-2">
+      <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+        <Icon size={11} className={tone} />
+        {label}
+      </div>
+      <div className={`text-[11px] font-semibold ${tone}`}>{value}%</div>
     </div>
   );
 }
@@ -31,12 +44,44 @@ export default function CaseTemplateCard({
   selected: WorkflowCase;
   onSelect: (c: WorkflowCase) => void;
 }) {
+  const selectedCase = WORKFLOW_CASES.find((c) => c.id === selected) || WORKFLOW_CASES[0];
+  const selectedLayout = caseLayouts[selectedCase.id];
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div className="section-label">AI Selected Workflow</div>
-        <div className="badge-violet text-[10px]"><Sparkles size={10} /> Auto-detected</div>
+        <div className="badge-violet text-[10px]"><Sparkles size={10} /> Best match</div>
       </div>
+
+      <motion.div
+        key={selectedCase.id}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-xl border border-violet-500/25 bg-violet-500/[0.07] p-3"
+      >
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_90%_0%,rgba(99,102,241,0.18),transparent_38%)]" />
+        <div className="relative grid grid-cols-[92px_1fr] gap-3">
+          <div className="rounded-lg border border-white/[0.07] bg-black/20 p-2">
+            <MiniThumbnail panels={selectedCase.panels} cols={selectedLayout.cols} rows={selectedLayout.rows} />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold text-white leading-tight">{selectedCase.title}</div>
+                <div className="mt-1 text-[10px] text-gray-400">{selectedCase.description}</div>
+              </div>
+              <div className="badge-emerald text-[10px] shrink-0"><CheckCircle2 size={10} /> Selected</div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-1.5">
+              <Metric icon={Target} label="Match" value={selectedCase.match} tone="text-emerald-400" />
+              <Metric icon={Zap} label="Coherence" value={selectedCase.coherence} tone="text-violet-300" />
+              <Metric icon={Shield} label="Stability" value={selectedCase.stability} tone="text-blue-300" />
+              <Metric icon={DollarSign} label="Efficiency" value={selectedCase.efficiency} tone="text-amber-300" />
+            </div>
+          </div>
+        </div>
+      </motion.div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar -mx-1 px-1">
         {WORKFLOW_CASES.map((c) => {
@@ -48,7 +93,7 @@ export default function CaseTemplateCard({
               key={c.id}
               layout
               onClick={() => onSelect(c.id)}
-              className={`relative flex-shrink-0 w-[180px] p-3 rounded-xl border text-left transition-all ${
+              className={`relative flex-shrink-0 w-[158px] p-2.5 rounded-xl border text-left transition-all ${
                 isActive
                   ? 'border-violet-500/40 bg-violet-500/10 shadow-lg shadow-violet-500/10'
                   : 'border-white/[0.06] bg-white/[0.02] hover:border-white/[0.15]'
@@ -57,30 +102,17 @@ export default function CaseTemplateCard({
               whileTap={{ scale: 0.97 }}
             >
               {/* Mini layout thumbnail */}
-              <div className="mb-2" style={{ height: 72 }}>
+              <div className="mb-2 rounded-lg bg-black/20 p-1.5" style={{ height: 58 }}>
                 <MiniThumbnail panels={c.panels} cols={layout.cols} rows={layout.rows} />
               </div>
 
               <div className="text-xs font-semibold text-white mb-0.5 truncate">{c.title}</div>
               <div className="flex items-center gap-2 text-[9px] text-gray-500 mb-1">
-                <span>{c.panels} panels</span>
+                <span className="flex items-center gap-1"><Film size={8} /> {c.panels} panels</span>
                 {c.tags.slice(0, 2).map(t => (
                   <span key={t} className="bg-white/[0.04] px-1.5 py-0.5 rounded-full">{t}</span>
                 ))}
               </div>
-
-              {isActive && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="space-y-0.5 pt-1.5 border-t border-violet-500/20"
-                >
-                  <div className="flex items-center gap-1 text-[9px] text-emerald-400"><CheckCircle2 size={7} /> {c.match}% match</div>
-                  <div className="flex items-center gap-1 text-[9px] text-violet-400"><Zap size={7} /> {c.coherence}% coherence</div>
-                  <div className="flex items-center gap-1 text-[9px] text-blue-400"><Shield size={7} /> {c.stability}% stability</div>
-                  <div className="flex items-center gap-1 text-[9px] text-amber-400"><DollarSign size={7} /> {c.efficiency}% efficiency</div>
-                </motion.div>
-              )}
 
               {/* Active badge */}
               {isActive && (

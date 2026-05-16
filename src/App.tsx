@@ -5,7 +5,8 @@ import {
   Sliders, Sparkles, Square, Zap, ChevronDown, ChevronRight, Copy,
 } from 'lucide-react';
 
-import type { Scene, WorkflowMode, WorkflowCase, Mode, TabType, AnalyticsStats, JobEntry, BatchItem, ExportSummary, SeedancePrompt } from './types';
+import type { Scene, WorkflowMode, WorkflowCase, Mode, TabType, AnalyticsStats, JobEntry, BatchItem, ExportSummary } from './types';
+import type { SeedancePrompt } from './prompts/seedancePrompts';
 
 import { initApiClient } from './lib/api';
 import { getCategories, getPromptsByCategory } from './prompts/seedancePrompts';
@@ -408,14 +409,14 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f]">
+    <div className="min-h-screen bg-[#090a10]">
       {/* Background glow */}
       <div className="fixed inset-0 pointer-events-none" style={{
-        background: 'radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.12) 0%, transparent 70%)'
+        background: 'radial-gradient(ellipse at 50% 0%, rgba(124,58,237,0.18) 0%, rgba(37,99,235,0.08) 32%, transparent 70%)'
       }} />
 
       {/* ── Header ── */}
-      <header className="relative z-10 border-b border-white/[0.06]">
+      <header className="relative z-10 border-b border-white/[0.06] bg-black/20 backdrop-blur-xl">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
@@ -423,7 +424,7 @@ function App() {
             </div>
             <div>
               <h1 className="text-sm font-bold text-white leading-tight">Storyboard SaaS</h1>
-              <div className="text-[10px] text-violet-300 font-medium">Storyboard Techniques Only</div>
+              <div className="text-[10px] text-violet-300 font-medium">AI cinematic workflow engine</div>
             </div>
           </div>
 
@@ -452,19 +453,44 @@ function App() {
         </div>
       </header>
 
+      {/* Compact cinematic hero */}
+      <section className="relative z-10 border-b border-white/[0.04]">
+        <div className="max-w-[1440px] mx-auto px-4 sm:px-6 py-5">
+          <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.035] px-5 py-5 backdrop-blur-2xl">
+            <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_20%_0%,rgba(124,58,237,0.22),transparent_36%),radial-gradient(circle_at_80%_20%,rgba(59,130,246,0.16),transparent_34%)]" />
+            <div className="relative flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <div className="badge-violet mb-3 w-fit text-[10px]">Storyboard Techniques Only</div>
+                <h2 className="text-2xl sm:text-3xl font-semibold tracking-normal text-white">Storyboard-to-Video AI</h2>
+                <p className="mt-2 max-w-2xl text-sm text-gray-400">
+                  Generate storyboard workflows, GPT Image prompts, and Seedance animation prompts automatically.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-[10px] text-gray-400 lg:w-[360px]">
+                <div className="rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-2">
+                  <div className="text-violet-200 font-semibold">Strategy</div>
+                  <div>AI workflow match</div>
+                </div>
+                <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2">
+                  <div className="text-blue-200 font-semibold">Storyboard</div>
+                  <div>Panel system</div>
+                </div>
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                  <div className="text-emerald-200 font-semibold">Motion</div>
+                  <div>Seedance ready</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── Main Layout ── */}
       <div className="relative z-10 max-w-[1440px] mx-auto px-4 sm:px-6 py-5 flex flex-col lg:flex-row gap-6"
-        style={{ minHeight: 'calc(100vh - 56px)' }}
+        style={{ minHeight: 'calc(100vh - 190px)' }}
       >
         {/* ═══ LEFT PANEL (35%) ═══ */}
         <div className="w-full lg:w-[35%] space-y-3">
-          {/* Subtitle */}
-          <div className="glass-panel p-3">
-            <p className="text-xs text-gray-500 leading-relaxed">
-              Generate storyboard workflows, GPT Image prompts, and Seedance animation prompts automatically.
-            </p>
-          </div>
-
           {/* Recent Workflows */}
           <RecentWorkflows items={recentWorkflows} onLoad={loadWorkflow} />
 
