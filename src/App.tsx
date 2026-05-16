@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Copy, Settings2, Sparkles } from 'lucide-react';
 
 import type { Scene, WorkflowCase } from './types';
@@ -8,6 +8,7 @@ import { analyzeVideoProfile } from './lib/caseRouter';
 import { analyzeSafety } from './lib/safetyAnalyzer';
 import { buildAllPrompts } from './lib/promptBuilder';
 import { WORKFLOW_CASES, getCaseInfo } from './lib/workflowCases';
+import { PROMPT_SETS, getPromptSet, type PromptSetId } from './lib/promptSets';
 
 import StoryboardPreview from './components/StoryboardPreview';
 import AIReasoningPanel from './components/AIReasoningPanel';
@@ -42,6 +43,7 @@ function App() {
   const [motionPrompt, setMotionPrompt] = useState('');
   const [negativePrompt, setNegativePrompt] = useState('');
   const [additionalInstruction, setAdditionalInstruction] = useState('');
+  const [promptSet, setPromptSet] = useState<PromptSetId>('custom');
 
   const [language, setLanguage] = useState('English');
   const [detailLevel, setDetailLevel] = useState('Detailed');
@@ -56,6 +58,18 @@ function App() {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [selectedImages, setSelectedImages] = useState<Record<string, boolean>>({});
   const [outputTab, setOutputTab] = useState<OutputTab>('storyboard');
+
+  const activePromptSet = getPromptSet(promptSet);
+
+  useEffect(() => {
+    if (promptSet === 'custom') return;
+    const preset = getPromptSet(promptSet);
+    setCinematicStylePrompt(preset.cinematicStylePrompt);
+    setCameraPrompt(preset.cameraPrompt);
+    setMotionPrompt(preset.motionPrompt);
+    setNegativePrompt(preset.negativePrompt);
+    setAdditionalInstruction(preset.additionalInstruction);
+  }, [promptSet]);
 
   const aiAnalysis = useMemo(
     () => {
@@ -138,6 +152,7 @@ function App() {
         `Platform: ${platform}`,
         `Language: ${language}`,
         `Detail level: ${detailLevel}`,
+        `Prompt set: ${activePromptSet.label}`,
         cinematicStylePrompt ? `Cinematic style prompt: ${cinematicStylePrompt}` : '',
         cameraPrompt ? `Camera prompt: ${cameraPrompt}` : '',
         motionPrompt ? `Motion prompt: ${motionPrompt}` : '',
@@ -288,6 +303,18 @@ function App() {
 
                 <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-3">
                   <div className="mb-3 text-xs font-semibold text-white">Prompt Details</div>
+                  <label className="mb-3 block">
+                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Prompt set</span>
+                    <select className="select-field text-sm" value={promptSet} onChange={(event) => setPromptSet(event.target.value as PromptSetId)} aria-label="Prompt set">
+                      {PROMPT_SETS.map((preset) => (
+                        <option key={preset.id} value={preset.id}>{preset.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="mb-3 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2 text-[11px] text-gray-400">
+                    <span className="block font-medium text-gray-200">{activePromptSet.category}</span>
+                    <span className="block mt-0.5">{activePromptSet.description}</span>
+                  </div>
                   <div className="space-y-3">
                     <input className="input-field text-sm" value={cinematicStylePrompt} onChange={(event) => setCinematicStylePrompt(event.target.value)} placeholder="Cinematic style prompt" />
                     <input className="input-field text-sm" value={cameraPrompt} onChange={(event) => setCameraPrompt(event.target.value)} placeholder="Camera prompt" />
@@ -383,6 +410,7 @@ function App() {
                       platform={platform}
                       language={language}
                       detailLevel={detailLevel}
+                      promptSet={activePromptSet.label}
                       imageModel={imageModel}
                       videoModel={videoModel}
                     />

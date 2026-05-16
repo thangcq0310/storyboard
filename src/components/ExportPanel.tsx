@@ -7,6 +7,7 @@ export default function ExportPanel({
   scenes,
   storyIdea,
   workflowCase,
+  promptSet,
   artStyle,
   mood,
   duration,
@@ -20,6 +21,7 @@ export default function ExportPanel({
   scenes: Scene[];
   storyIdea: string;
   workflowCase: WorkflowCase;
+  promptSet: string;
   artStyle: string;
   mood: string;
   duration: number;
@@ -33,6 +35,7 @@ export default function ExportPanel({
   const workflow = getCaseInfo(workflowCase);
   const settings = [
     `Workflow: ${workflow.title}`,
+    `Prompt set: ${promptSet}`,
     `Panels: ${workflow.panels}`,
     `Style: ${artStyle}`,
     `Mood: ${mood}`,
@@ -82,6 +85,7 @@ export default function ExportPanel({
           storyIdea,
           workflowCase,
           workflow: workflow.title,
+          promptSet,
           panels: workflow.panels,
           artStyle,
           mood,
