@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Settings2, Key, Wifi, WifiOff, X, Save, Loader2, AlertTriangle } from 'lucide-react';
-import { ApiClient } from '../lib/api';
+import { Settings2, Key, Wifi, WifiOff, X, Save, Loader2, AlertTriangle, Server } from 'lucide-react';
+import { ApiClient, PROVIDERS } from '../lib/api';
+import type { ProviderId } from '../lib/api';
 
 interface Props {
   client: React.MutableRefObject<ApiClient>;
   onClose: () => void;
+  imageProvider: ProviderId;
+  videoProvider: ProviderId;
   imageModel: string;
   videoModel: string;
+  onImageProviderChange: (p: ProviderId) => void;
+  onVideoProviderChange: (p: ProviderId) => void;
   onImageModelChange: (m: string) => void;
   onVideoModelChange: (m: string) => void;
 }
@@ -15,41 +20,61 @@ interface Props {
 export default function SettingsModal({
   client,
   onClose,
+  imageProvider,
+  videoProvider,
   imageModel,
   videoModel,
+  onImageProviderChange,
+  onVideoProviderChange,
   onImageModelChange,
   onVideoModelChange,
 }: Props) {
-  const [apiKeyInput, setApiKeyInput] = useState(client.current.getApiKey() || '');
+  const [credentialProvider, setCredentialProvider] = useState<ProviderId>(imageProvider);
+  const [apiKeyInput, setApiKeyInput] = useState(client.current.getProviderCredentials(imageProvider).apiKey || '');
+  const [baseUrlInput, setBaseUrlInput] = useState(client.current.getProviderCredentials(imageProvider).baseUrl || '');
   const [apiStatus, setApiStatus] = useState<'connected' | 'disconnected' | 'checking' | 'error'>(() =>
-    client.current.isConfigured() ? 'connected' : 'disconnected'
+    client.current.getProviderCredentials(imageProvider).apiKey ? 'connected' : 'disconnected'
   );
   const [apiMessage, setApiMessage] = useState('');
 
+  const getProvider = (providerId: ProviderId) =>
+    PROVIDERS.find((provider) => provider.id === providerId) || PROVIDERS[0];
+
+  const loadProviderCredentials = (providerId: ProviderId) => {
+    const credentials = client.current.getProviderCredentials(providerId);
+    setCredentialProvider(providerId);
+    setApiKeyInput(credentials.apiKey || '');
+    setBaseUrlInput(credentials.baseUrl || '');
+    setApiMessage('');
+    setApiStatus(credentials.apiKey ? 'connected' : 'disconnected');
+  };
+
   useEffect(() => {
-    if (client.current.isConfigured()) {
+    if (client.current.getProviderCredentials(credentialProvider).apiKey) {
       setApiStatus('connected');
     }
-  }, []);
+  }, [client, credentialProvider]);
 
   const handleSave = async () => {
     const key = apiKeyInput.trim();
     if (!key) return;
 
     setApiStatus('checking');
-    setApiMessage('Testing Replicate connection...');
+    setApiMessage(`Testing ${getProvider(credentialProvider).label} connection...`);
 
-    const result = await client.current.testConnection(key);
+    const credentials = { apiKey: key, baseUrl: baseUrlInput.trim() };
+    const result = await client.current.testProviderConnection(credentialProvider, credentials);
     if (result.error) {
       setApiStatus('error');
       setApiMessage(result.error);
       return;
     }
 
-    client.current.setApiKey(key);
-    client.current.saveModelConfig({ imageModel, videoModel });
+    client.current.setProviderCredentials(credentialProvider, credentials);
+    if (credentialProvider === 'replicate') client.current.setApiKey(key);
+    client.current.saveModelConfig({ imageProvider, videoProvider, imageModel, videoModel });
     setApiStatus('connected');
-    setApiMessage('Replicate connection verified.');
+    setApiMessage(`${getProvider(credentialProvider).label} connection verified.`);
     onClose();
   };
 
@@ -107,41 +132,104 @@ export default function SettingsModal({
             <div className="section-label">Model Configuration</div>
 
             <div>
-              <label className="text-xs text-gray-400 mb-1.5 block">Image Model</label>
+              <label className="text-xs text-gray-400 mb-1.5 block">Image Provider</label>
               <select
                 className="select-field"
-                value={imageModel}
-                onChange={(e) => onImageModelChange(e.target.value)}
+                value={imageProvider}
+                onChange={(e) => onImageProviderChange(e.target.value as ProviderId)}
               >
-                <option value="Nano Banana Pro">Nano Banana Pro</option>
-                <option value="FLUX.2 Pro">FLUX.2 Pro</option>
-                <option value="SD3.0">SD3.0</option>
+                {PROVIDERS.map((provider) => (
+                  <option key={provider.id} value={provider.id}>{provider.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">Image Model</label>
+              {imageProvider === 'custom' ? (
+                <input className="input-field" value={imageModel} onChange={(e) => onImageModelChange(e.target.value)} placeholder="provider/model or version id" />
+              ) : (
+                <select
+                  className="select-field"
+                  value={imageModel}
+                  onChange={(e) => onImageModelChange(e.target.value)}
+                >
+                  {getProvider(imageProvider).imageModels.map((model) => (
+                    <option key={model.id} value={model.id}>{model.label}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div>
+              <label className="text-xs text-gray-400 mb-1.5 block">Video Provider</label>
+              <select
+                className="select-field"
+                value={videoProvider}
+                onChange={(e) => onVideoProviderChange(e.target.value as ProviderId)}
+              >
+                {PROVIDERS.map((provider) => (
+                  <option key={provider.id} value={provider.id}>{provider.label}</option>
+                ))}
               </select>
             </div>
 
             <div>
               <label className="text-xs text-gray-400 mb-1.5 block">Video Model</label>
-              <select
-                className="select-field"
-                value={videoModel}
-                onChange={(e) => onVideoModelChange(e.target.value)}
-              >
-                <option value="Veo 3.1 Lite">Veo 3.1 Lite</option>
-                <option value="Seedance 2.0">Seedance 2.0</option>
-                <option value="Happy Horse">Happy Horse</option>
-              </select>
+              {videoProvider === 'custom' ? (
+                <input className="input-field" value={videoModel} onChange={(e) => onVideoModelChange(e.target.value)} placeholder="provider/model or version id" />
+              ) : (
+                <select
+                  className="select-field"
+                  value={videoModel}
+                  onChange={(e) => onVideoModelChange(e.target.value)}
+                >
+                  {getProvider(videoProvider).videoModels.map((model) => (
+                    <option key={model.id} value={model.id}>{model.label}</option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
           {/* API Key */}
           <div className="space-y-3">
             <label className="text-xs text-gray-400 flex items-center gap-2">
-              <Key size={12} /> Replicate API Key
+              <Server size={12} /> API Provider Credentials
+            </label>
+            <select
+              className="select-field"
+              value={credentialProvider}
+              onChange={(e) => loadProviderCredentials(e.target.value as ProviderId)}
+            >
+              {PROVIDERS.map((provider) => (
+                <option key={provider.id} value={provider.id}>{provider.label}</option>
+              ))}
+            </select>
+            {credentialProvider === 'custom' && (
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block">Base URL</label>
+                <input
+                  className="input-field"
+                  placeholder="https://your-api.example.com/v1"
+                  value={baseUrlInput}
+                  onChange={(e) => {
+                    setBaseUrlInput(e.target.value);
+                    if (apiStatus === 'error') {
+                      setApiStatus('disconnected');
+                      setApiMessage('');
+                    }
+                  }}
+                />
+              </div>
+            )}
+            <label className="text-xs text-gray-400 flex items-center gap-2">
+              <Key size={12} /> API Key
             </label>
             <input
               type="password"
               className="input-field"
-              placeholder="r8_xxx..."
+              placeholder={credentialProvider === 'replicate' ? 'r8_xxx...' : 'Provider API key'}
               value={apiKeyInput}
               onChange={(e) => {
                 setApiKeyInput(e.target.value);
@@ -168,9 +256,13 @@ export default function SettingsModal({
         </div>
 
         <div className="flex gap-3 mt-6">
-          <button className="btn-primary flex-1" onClick={handleSave} disabled={!apiKeyInput.trim() || apiStatus === 'checking'}>
+          <button
+            className="btn-primary flex-1"
+            onClick={handleSave}
+            disabled={!apiKeyInput.trim() || (credentialProvider === 'custom' && !baseUrlInput.trim()) || apiStatus === 'checking'}
+          >
             {apiStatus === 'checking' ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-            Test & Save
+            Test & Save Provider
           </button>
           <button className="btn-secondary flex-1" onClick={onClose}>
             <X size={15} /> Cancel

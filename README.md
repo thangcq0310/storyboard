@@ -40,7 +40,7 @@ The app only supports these storyboard-to-video workflow patterns:
 - Tailwind CSS
 - Framer Motion
 - Lucide React
-- Replicate REST API integration
+- Multi-provider API integration with Replicate and custom compatible APIs
 
 ## Getting Started
 
@@ -76,9 +76,23 @@ npm run preview
 
 ## API Configuration
 
-Open **Settings** inside the app and add a Replicate API key.
+Open **Settings** inside the app and choose providers/models for image and video generation.
 
-The key is stored locally in the browser using `localStorage`.
+Built-in provider options:
+
+- **Replicate**: uses the Replicate predictions API.
+- **Custom API**: uses a Replicate-compatible API gateway or proxy. The endpoint must support:
+  - `GET /predictions?limit=1`
+  - `POST /predictions`
+  - `GET /predictions/:id`
+
+For Custom API, set the base URL in Settings, for example:
+
+```text
+https://your-api.example.com/v1
+```
+
+Provider keys and model selections are stored locally in the browser using `localStorage`.
 
 During local development, Replicate requests are proxied through Vite:
 

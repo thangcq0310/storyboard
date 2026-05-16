@@ -8,7 +8,8 @@ import {
 import type { Scene, WorkflowMode, WorkflowCase, Mode, TabType, AnalyticsStats, JobEntry, BatchItem, ExportSummary } from './types';
 import type { SeedancePrompt } from './prompts/seedancePrompts';
 
-import { initApiClient } from './lib/api';
+import { initApiClient, PROVIDERS } from './lib/api';
+import type { ProviderId } from './lib/api';
 import { getCategories, getPromptsByCategory } from './prompts/seedancePrompts';
 import { analyzeVideoProfile } from './lib/caseRouter';
 import { analyzeSafety } from './lib/safetyAnalyzer';
@@ -79,11 +80,13 @@ function App() {
   const [charConsistency] = useState(true);
 
   // ── Image Generation ──
+  const [imageProvider, setImageProvider] = useState<ProviderId>(() => apiClient.current.getModelConfig().imageProvider);
   const [imageModel, setImageModel] = useState(() => apiClient.current.getModelConfig().imageModel);
   const [_imageQuality, _setImageQuality] = useState('1024px');
   const [selectedImages, setSelectedImages] = useState<Record<string, boolean>>({});
 
   // ── Video State ──
+  const [videoProvider, setVideoProvider] = useState<ProviderId>(() => apiClient.current.getModelConfig().videoProvider);
   const [videoModel, setVideoModel] = useState(() => apiClient.current.getModelConfig().videoModel);
   const [addMusic, setAddMusic] = useState(false);
   const [danceStyle, setDanceStyle] = useState('Smooth / Cinematic');
@@ -233,7 +236,9 @@ function App() {
   const handleRemoveFromBatch = (id: string) => setBatchQueue(prev => prev.filter(item => item.id !== id));
 
   const processBatchItem = async (item: BatchItem, index: number): Promise<BatchItem> => {
-    if (!apiClient.current.isConfigured()) return { ...item, status: 'failed', error: 'API not configured' };
+    if (!apiClient.current.isProviderConfigured(imageProvider) || !apiClient.current.isProviderConfigured(videoProvider)) {
+      return { ...item, status: 'failed', error: 'API not configured' };
+    }
     setBatchCurrentIndex(index);
     setBatchQueue(prev => prev.map((q, i) => i === index ? { ...q, status: 'processing' as const } : q));
 
@@ -246,7 +251,7 @@ function App() {
     const imageUrls: string[] = [];
     for (let i = 0; i < generatedScenes.length; i++) {
       setProgress(Math.round(((i + 1) / (generatedScenes.length * 2)) * 100));
-      const result = await apiClient.current.image.generateImage(generatedScenes[i].prompt, imageModel, { resolution: '1 MP' as const, aspect_ratio: '16:9' });
+      const result = await apiClient.current.image.generateImage(generatedScenes[i].prompt, imageModel, { resolution: '1 MP' as const, aspect_ratio: '16:9' }, imageProvider);
       if (result.data?.url) { imageUrls.push(result.data.url); updateStats('image', true, 'FLUX'); }
       else { updateStats('image', false, 'FLUX'); }
     }
@@ -265,7 +270,7 @@ function App() {
     const videoUrls: string[] = [];
     for (let i = 0; i < imageUrls.length; i++) {
       setProgress(Math.round(((generatedScenes.length + i + 1) / (generatedScenes.length * 2)) * 100));
-      const result = await apiClient.current.video.generateVideo(imageUrls[i], videoModel, { duration: 5 }, danceStyleTags[item.style] || item.style);
+      const result = await apiClient.current.video.generateVideo(imageUrls[i], videoModel, { duration: 5 }, danceStyleTags[item.style] || item.style, videoProvider);
       if (result.data?.url) { videoUrls.push(result.data.url); updateStats('video', true, 'Seedance2'); }
       else { updateStats('video', false, 'Seedance2'); }
     }
@@ -277,7 +282,10 @@ function App() {
 
   const handleStartBatch = async () => {
     if (batchQueue.length === 0) return;
-    if (!apiClient.current.isConfigured()) { alert('Configure Replicate API key first.'); return; }
+    if (!apiClient.current.isProviderConfigured(imageProvider) || !apiClient.current.isProviderConfigured(videoProvider)) {
+      alert('Configure image and video provider credentials first.');
+      return;
+    }
     setBatchProcessing(true);
     setProgress(0);
     try {
@@ -297,7 +305,10 @@ function App() {
 
   // ── Generate Storyboard ──
   const handleGenerateStoryboard = async () => {
-    if (!apiClient.current.isConfigured()) { alert('Configure Replicate API key first.'); return; }
+    if (workflowMode !== 'videos' && !apiClient.current.isProviderConfigured(imageProvider)) {
+      alert('Configure image provider credentials first.');
+      return;
+    }
     setIsProcessing(true);
     setGenerationStatus('scenes');
 
@@ -340,7 +351,7 @@ function App() {
         setProgress(Math.round(((i + 1) / scenesToProcess.length) * 100));
         let fullPrompt = scenesToProcess[i].prompt;
         if (charConsistency) fullPrompt += ', same character, consistent appearance, high detail';
-        const result = await apiClient.current.image.generateImage(fullPrompt, imageModel, { resolution, aspect_ratio: aspectRatio === '1:1' ? '1:1' : aspectRatio === '9:16' ? '9:16' : '16:9' });
+        const result = await apiClient.current.image.generateImage(fullPrompt, imageModel, { resolution, aspect_ratio: aspectRatio === '1:1' ? '1:1' : aspectRatio === '9:16' ? '9:16' : '16:9' }, imageProvider);
         if (result.data?.url) { updateStats('image', true, 'FLUX'); updatedScenes.push({ ...scenesToProcess[i], imageUrl: result.data.url }); }
         else { updateStats('image', false, 'FLUX'); updatedScenes.push({ ...scenesToProcess[i], imageUrl: '' }); }
       }
@@ -358,7 +369,7 @@ function App() {
 
   // ── Generate Videos ──
   const handleGenerateVideos = async () => {
-    if (!apiClient.current.isConfigured()) { alert('Configure API key first.'); return; }
+    if (!apiClient.current.isProviderConfigured(videoProvider)) { alert('Configure video provider credentials first.'); return; }
     const totalSelected = Object.values(selectedImages).filter(Boolean).length;
     if (totalSelected === 0) { alert('Select at least one image.'); return; }
 
@@ -382,7 +393,7 @@ function App() {
         const scene = scenes[sceneIdx];
         setVideosDone(i);
         setProgress(Math.round(((i + 1) / totalSelected) * 100));
-        const result = await apiClient.current.video.generateVideo(scene.imageUrl || '', videoModel, { duration }, prompt);
+        const result = await apiClient.current.video.generateVideo(scene.imageUrl || '', videoModel, { duration }, prompt, videoProvider);
         if (result.error) updateStats('video', false, videoModel);
         else if (result.data?.url) updateStats('video', true, videoModel);
       }
@@ -406,6 +417,21 @@ function App() {
   // ── Prompt architecture click → switch to prompts tab ──
   const handlePromptTagClick = (label: string) => {
     setActiveTab('prompts');
+  };
+
+  const getProvider = (providerId: ProviderId) =>
+    PROVIDERS.find((provider) => provider.id === providerId) || PROVIDERS[0];
+
+  const handleImageProviderChange = (providerId: ProviderId) => {
+    const provider = getProvider(providerId);
+    setImageProvider(providerId);
+    setImageModel(provider.imageModels[0]?.id || '');
+  };
+
+  const handleVideoProviderChange = (providerId: ProviderId) => {
+    const provider = getProvider(providerId);
+    setVideoProvider(providerId);
+    setVideoModel(provider.videoModels[0]?.id || '');
   };
 
   return (
@@ -590,13 +616,21 @@ function App() {
                 </select>
               </div>
               <div>
-                <label className="text-[10px] text-gray-500 mb-1 block">Image Model</label>
-                <select className="select-field text-xs" value={imageModel} onChange={e => setImageModel(e.target.value)}>
-                  <option value="Nano Banana Pro">Nano Banana</option>
-                  <option value="FLUX.2 Pro">FLUX.2 Pro</option>
-                  <option value="SD3.0">SD3.0</option>
+                <label className="text-[10px] text-gray-500 mb-1 block">Image Provider</label>
+                <select className="select-field text-xs" value={imageProvider} onChange={e => handleImageProviderChange(e.target.value as ProviderId)}>
+                  {PROVIDERS.map(provider => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
                 </select>
               </div>
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 mb-1 block">Image Model</label>
+              {imageProvider === 'custom' ? (
+                <input className="input-field text-xs" value={imageModel} onChange={e => setImageModel(e.target.value)} placeholder="provider/model or version id" />
+              ) : (
+                <select className="select-field text-xs" value={imageModel} onChange={e => setImageModel(e.target.value)}>
+                  {getProvider(imageProvider).imageModels.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
+                </select>
+              )}
             </div>
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/10">
               <div className="flex items-center gap-2">
@@ -694,11 +728,9 @@ function App() {
                 <div className="section-label mb-3">Animation Motion</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Video Model</label>
-                    <select className="select-field text-xs" value={videoModel} onChange={e => setVideoModel(e.target.value)}>
-                      <option value="Veo 3.1 Lite">Veo 3.1 Lite</option>
-                      <option value="Seedance 2.0">Seedance 2.0</option>
-                      <option value="Happy Horse">Happy Horse</option>
+                    <label className="text-xs text-gray-400 mb-1 block">Video Provider</label>
+                    <select className="select-field text-xs" value={videoProvider} onChange={e => handleVideoProviderChange(e.target.value as ProviderId)}>
+                      {PROVIDERS.map(provider => <option key={provider.id} value={provider.id}>{provider.label}</option>)}
                     </select>
                   </div>
                   <div>
@@ -707,6 +739,16 @@ function App() {
                       <option>Smooth / Cinematic</option><option>Hip Hop</option><option>Ballet</option><option>Freestyle</option>
                     </select>
                   </div>
+                </div>
+                <div className="mt-3">
+                  <label className="text-xs text-gray-400 mb-1 block">Video Model</label>
+                  {videoProvider === 'custom' ? (
+                    <input className="input-field text-xs" value={videoModel} onChange={e => setVideoModel(e.target.value)} placeholder="provider/model or version id" />
+                  ) : (
+                    <select className="select-field text-xs" value={videoModel} onChange={e => setVideoModel(e.target.value)}>
+                      {getProvider(videoProvider).videoModels.map(model => <option key={model.id} value={model.id}>{model.label}</option>)}
+                    </select>
+                  )}
                 </div>
                 <div className="mt-3">
                   <label className="text-xs text-gray-400 mb-1 flex justify-between">
@@ -818,7 +860,9 @@ function App() {
       {/* Modals */}
       {showSettings && (
         <SettingsModal client={apiClient} onClose={() => setShowSettings(false)}
+          imageProvider={imageProvider} videoProvider={videoProvider}
           imageModel={imageModel} videoModel={videoModel}
+          onImageProviderChange={handleImageProviderChange} onVideoProviderChange={handleVideoProviderChange}
           onImageModelChange={setImageModel} onVideoModelChange={setVideoModel} />
       )}
       {showAnalytics && (
