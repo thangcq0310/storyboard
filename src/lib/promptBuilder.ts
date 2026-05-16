@@ -51,7 +51,7 @@ export function getWorkflowPromptConfig(workflowCase: WorkflowCase) {
 }
 
 export function buildPromptForScene(scene: Scene, idx: number, artStyle: string, mood: string, workflowCase: WorkflowCase): BuiltPrompt {
-  const style = scene.description || `Scene ${idx + 1} of the story`;
+  const scenePlan = scene.prompt || scene.description || `Scene ${idx + 1} of the story`;
   const config = workflowPromptConfig[workflowCase];
   const panelNumber = (idx % config.panelCount) + 1;
   const cameraDirection = config.cameraPattern[idx % config.cameraPattern.length];
@@ -59,11 +59,11 @@ export function buildPromptForScene(scene: Scene, idx: number, artStyle: string,
 
   return {
     system: `You are a cinematic prompt engineer creating a ${config.title}. Follow this workflow strategy: ${config.strategy}. Panel ${panelNumber} must remain coherent with the surrounding storyboard.`,
-    style: `${style}. Style: ${artStyle}, mood: ${mood}, ${config.title}, professional photography, high quality, detailed lighting, cinematic color grading, 8k.`,
+    style: `${scenePlan}. Style: ${artStyle}, mood: ${mood}, ${config.title}, professional photography, high quality, detailed lighting, cinematic color grading, 8k.`,
     camera: `Camera: ${cameraDirection}. Preserve composition logic for ${config.title}. Shallow depth of field only when it supports the beat.`,
     motion: `Motion: ${motionDirection}. ${workflowCase === 'case2' ? 'Maintain motion continuity across the 3x3 grid.' : workflowCase === 'case10' ? 'Keep cuts fast, legible, and rhythmic.' : workflowCase === 'case19' ? 'Prefer economical movement and reusable framing.' : 'Smooth cinematic movement.'}`,
     negative: 'blurry, low quality, distorted, watermark, text, logo, oversaturated, unnatural colors, lens flare, grain',
-    seedance: seedancePromptForScene(style, artStyle, workflowCase, motionDirection),
+    seedance: seedancePromptForScene(scenePlan, artStyle, workflowCase, motionDirection),
   };
 }
 

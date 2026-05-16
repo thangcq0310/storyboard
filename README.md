@@ -1,20 +1,18 @@
 # Storyboard-to-Video Automation
 
-Premium AI creative production tool for turning a video idea into storyboard panels, image prompts, motion prompts, and export-ready production documents.
+Premium AI creative generator for turning a video idea into storyboard prompts, Seedance motion prompts, shotlists, and export-ready workflow documents.
 
-The app is designed as an AI cinematic workflow system rather than a generic admin dashboard. It focuses on storyboard generation, prompt architecture, render safety analysis, and AI video workflow planning.
+The app is designed as a simple workflow-first cinematic generator rather than a generic admin dashboard.
 
 ## Features
 
-- Compact cinematic workspace for creative video planning
-- Storyboard grid preview with active sequence selection
-- AI selected workflow analysis with match, coherence, render stability, and cost efficiency
-- Prompt architecture visibility for cinematic style, camera direction, subject consistency, motion guidance, and lighting control
-- Render safety analysis for character consistency, motion complexity, frame drift risk, continuity, and Seedance compatibility
+- Workflow-first layout: choose workflow, enter idea, configure prompts, generate output
+- Four supported storyboard workflows only
+- Storyboard preview with the correct panel count for each workflow
 - Segmented prompt output cards for system, style, camera, motion, negative, and Seedance prompts
+- Shotlist and Seedance prompt generation toggles
 - Export options for Markdown workflow, JSON, prompt pack, and print-ready production brief
-- Creator Mode and Production Mode workspace switch
-- Batch mode, analytics, and saved recent workflows
+- Optional advanced section for reasoning, render safety, workflow pipeline, and prompt architecture
 
 ## Supported Workflow Cases
 
@@ -30,7 +28,7 @@ The app only supports these storyboard-to-video workflow patterns:
   A 12-frame montage workflow for high-energy sequences and rapid pacing.
 
 - **Case 19: Storyboard-First Cost Control**  
-  A 4-panel editorial workflow optimized for fewer render passes and lower cost.
+  An 8-panel editorial workflow optimized for fewer render passes and lower cost.
 
 ## Tech Stack
 

@@ -1,13 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Copy, Settings2, Sparkles, Upload } from 'lucide-react';
+import { CheckCircle2, Copy, Settings2, Sparkles } from 'lucide-react';
 
-import type { AnalyticsStats, BatchItem, JobEntry, Scene, WorkflowCase } from './types';
+import type { Scene, WorkflowCase } from './types';
 import { initApiClient, PROVIDERS } from './lib/api';
 import type { ProviderId } from './lib/api';
 import { analyzeVideoProfile } from './lib/caseRouter';
 import { analyzeSafety } from './lib/safetyAnalyzer';
 import { buildAllPrompts } from './lib/promptBuilder';
-import { saveWorkflowToHistory } from './lib/sampleWorkflows';
 import { WORKFLOW_CASES, getCaseInfo } from './lib/workflowCases';
 
 import StoryboardPreview from './components/StoryboardPreview';
@@ -19,7 +18,6 @@ import PromptOutputPanel from './components/PromptOutputPanel';
 import AccordionSection from './components/AccordionSection';
 import ExportPanel from './components/ExportPanel';
 import SettingsModal from './components/SettingsModal';
-import BatchModal from './components/BatchModal';
 
 type OutputTab = 'storyboard' | 'seedance' | 'shotlist' | 'export';
 
@@ -27,7 +25,6 @@ function App() {
   const apiClient = useRef(initApiClient());
 
   const [showSettings, setShowSettings] = useState(false);
-  const [showBatch, setShowBatch] = useState(false);
 
   const [workflowCase, setWorkflowCase] = useState<WorkflowCase | null>(null);
   const [storyIdea, setStoryIdea] = useState('');
@@ -37,10 +34,8 @@ function App() {
   const [mood, setMood] = useState('Dramatic');
   const [duration, setDuration] = useState(8);
   const [motionLevel] = useState(55);
-  const [numScenes] = useState(6);
   const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
   const [platform, setPlatform] = useState('YouTube');
-  const [budgetMode] = useState(false);
 
   const [cinematicStylePrompt, setCinematicStylePrompt] = useState('');
   const [cameraPrompt, setCameraPrompt] = useState('');
@@ -49,7 +44,6 @@ function App() {
   const [additionalInstruction, setAdditionalInstruction] = useState('');
 
   const [language, setLanguage] = useState('English');
-  const [outputFormatSetting, setOutputFormatSetting] = useState('Prompt Pack');
   const [detailLevel, setDetailLevel] = useState('Detailed');
   const [generateShotlist, setGenerateShotlist] = useState(true);
   const [generateSeedancePrompt, setGenerateSeedancePrompt] = useState(true);
@@ -62,10 +56,6 @@ function App() {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [selectedImages, setSelectedImages] = useState<Record<string, boolean>>({});
   const [outputTab, setOutputTab] = useState<OutputTab>('storyboard');
-
-  const [batchQueue, setBatchQueue] = useState<BatchItem[]>([]);
-  const [batchProcessing, setBatchProcessing] = useState(false);
-  const [batchCurrentIndex] = useState(0);
 
   const aiAnalysis = useMemo(
     () => {
@@ -84,8 +74,11 @@ function App() {
   );
 
   const builtPrompts = useMemo(
-    () => buildAllPrompts(scenes.filter((scene) => selectedImages[scene.id]), artStyle, mood, workflowCase || 'case1'),
-    [scenes, selectedImages, artStyle, mood, workflowCase],
+    () => buildAllPrompts(scenes, artStyle, mood, workflowCase || 'case1').map((prompt) => ({
+      ...prompt,
+      negative: negativePrompt || prompt.negative,
+    })),
+    [scenes, artStyle, mood, workflowCase, negativePrompt],
   );
 
   const selectedWorkflow = workflowCase ? getCaseInfo(workflowCase) : null;
@@ -140,8 +133,10 @@ function App() {
         environment ? `Setting: ${environment}` : '',
         `Visual style: ${artStyle}`,
         `Mood: ${mood}`,
+        `Duration: ${duration}s`,
+        `Aspect ratio: ${aspectRatio}`,
+        `Platform: ${platform}`,
         `Language: ${language}`,
-        `Output format: ${outputFormatSetting}`,
         `Detail level: ${detailLevel}`,
         cinematicStylePrompt ? `Cinematic style prompt: ${cinematicStylePrompt}` : '',
         cameraPrompt ? `Camera prompt: ${cameraPrompt}` : '',
@@ -159,21 +154,6 @@ function App() {
     setScenes(generatedScenes);
     setSelectedImages(Object.fromEntries(generatedScenes.map((scene) => [scene.id, true])));
     setOutputTab('storyboard');
-
-    saveWorkflowToHistory({
-      title: storyIdea.slice(0, 40) || selectedWorkflow.title,
-      storyIdea,
-      subject,
-      environment,
-      artStyle,
-      workflowCase,
-      mood,
-      duration,
-      motionLevel,
-      aspectRatio,
-      platform,
-      budgetMode,
-    });
   };
 
   const toggleImageSelect = (id: string) => setSelectedImages((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -192,33 +172,6 @@ function App() {
     }, 120);
   };
 
-  const handleLoadCSV = (csv: string) => {
-    const lines = csv.trim().split('\n');
-    if (lines.length < 2) return;
-    setBatchQueue(lines.slice(1).map((line, idx) => ({
-      id: `batch-${idx + 1}`,
-      story: line.split(',')[0] || `Story ${idx + 1}`,
-      scenes: selectedWorkflow?.panels || 6,
-      style: artStyle,
-      status: 'pending',
-      images: [],
-      videos: [],
-    })));
-  };
-
-  const stats: AnalyticsStats = {
-    totalImages: 0,
-    totalVideos: 0,
-    successfulImages: 0,
-    successfulVideos: 0,
-    failedImages: 0,
-    failedVideos: 0,
-    totalCost: 0,
-    batchJobs: 0,
-    lastUpdated: Date.now(),
-  };
-  const jobHistory: JobEntry[] = [];
-
   return (
     <div className="min-h-screen bg-[#090a10] text-white">
       <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_at_top,rgba(124,58,237,0.18),transparent_55%),radial-gradient(circle_at_80%_10%,rgba(37,99,235,0.10),transparent_30%)]" />
@@ -230,7 +183,6 @@ function App() {
             <h1 className="truncate text-lg font-semibold sm:text-xl">Workflow-first cinematic generator</h1>
           </div>
           <div className="flex flex-shrink-0 items-center gap-2">
-            <button className="btn-ghost text-xs" onClick={() => setShowBatch(true)}><Upload size={13} /> Batch</button>
             <button className="btn-ghost text-xs" onClick={() => setShowSettings(true)}><Settings2 size={13} /> Settings</button>
           </div>
         </div>
@@ -331,9 +283,6 @@ function App() {
                   <select className="select-field text-sm" value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="Language">
                     <option>English</option><option>Vietnamese</option><option>Japanese</option><option>Korean</option>
                   </select>
-                  <select className="select-field text-sm" value={outputFormatSetting} onChange={(event) => setOutputFormatSetting(event.target.value)} aria-label="Output format">
-                    <option>Prompt Pack</option><option>Markdown Workflow</option><option>JSON</option><option>Production Brief</option>
-                  </select>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -402,7 +351,20 @@ function App() {
                     </div>
                   )}
                   {outputTab === 'export' && (
-                    <ExportPanel scenes={scenes} storyIdea={storyIdea} artStyle={artStyle} imageModel={imageModel} videoModel={videoModel} />
+                    <ExportPanel
+                      scenes={scenes}
+                      storyIdea={storyIdea}
+                      workflowCase={workflowCase}
+                      artStyle={artStyle}
+                      mood={mood}
+                      duration={duration}
+                      aspectRatio={aspectRatio}
+                      platform={platform}
+                      language={language}
+                      detailLevel={detailLevel}
+                      imageModel={imageModel}
+                      videoModel={videoModel}
+                    />
                   )}
                 </div>
               </div>
@@ -433,11 +395,6 @@ function App() {
           onImageProviderChange={handleImageProviderChange} onVideoProviderChange={handleVideoProviderChange}
           onImageModelChange={setImageModel} onVideoModelChange={setVideoModel} />
       )}
-      <BatchModal show={showBatch} onClose={() => setShowBatch(false)}
-        batchQueue={batchQueue} batchProcessing={batchProcessing} batchCurrentIndex={batchCurrentIndex}
-        onLoadCSV={handleLoadCSV} onRemove={(id) => setBatchQueue((prev) => prev.filter((item) => item.id !== id))}
-        onStart={() => setBatchProcessing(false)} onClear={() => setBatchQueue([])}
-        onExport={() => alert('Batch Complete!')} onCancel={() => setBatchProcessing(false)} />
     </div>
   );
 }
