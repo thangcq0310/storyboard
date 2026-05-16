@@ -19,7 +19,7 @@ export function analyzeVideoProfile(
   const motionComplexity = motionLevel < 33 ? 'Low' : motionLevel < 66 ? 'Medium' : 'High';
   const narrativeDensity = numScenes > 8 ? 'High' : numScenes > 5 ? 'Medium' : 'Low';
   const continuityRequirement = duration > 8 ? 'High' : duration > 4 ? 'Medium' : 'Low';
-  const sceneTransitionRisk = motionLevel > 70 ? 'Caution' : motionLevel > 90 ? 'Risk' : 'Safe';
+  const sceneTransitionRisk = motionLevel > 90 ? 'Risk' : motionLevel > 70 ? 'Caution' : 'Safe';
 
   let workflowMatch = 'Case 1: Standard Storyboard → Video';
   if (budgetMode) workflowMatch = 'Case 19: Storyboard-First Cost Control';

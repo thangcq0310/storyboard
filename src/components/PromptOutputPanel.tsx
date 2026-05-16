@@ -18,6 +18,7 @@ const sections: { key: keyof BuiltPrompt; label: string; desc: string; color: st
 
 export default function PromptOutputPanel({ prompts }: Props) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const copyText = (text: string) => navigator.clipboard?.writeText(text).catch(() => undefined);
 
   if (prompts.length === 0) {
     return (
@@ -34,17 +35,35 @@ export default function PromptOutputPanel({ prompts }: Props) {
     const text = prompts.map((p, i) =>
       `Scene ${i + 1}\n${sections.map(s => `${s.label}\n${p[s.key] || ''}`).join('\n\n')}`
     ).join('\n\n---\n\n');
-    navigator.clipboard.writeText(text);
+    copyText(text);
+  };
+
+  const exportPromptPack = () => {
+    const text = prompts.map((p, i) =>
+      `Scene ${i + 1}\n${sections.map(s => `${s.label}\n${p[s.key] || ''}`).join('\n\n')}`
+    ).join('\n\n---\n\n');
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `prompt-pack-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
     <div className="space-y-4">
       {/* Copy All bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="section-label mb-0">Prompt Output</div>
-        <button onClick={copyAll} className="btn-ghost text-xs gap-1.5">
-          <Copy size={11} /> Copy All
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={copyAll} className="btn-ghost min-h-9 text-xs gap-1.5">
+            <Copy size={11} /> Copy All
+          </button>
+          <button type="button" onClick={exportPromptPack} className="btn-ghost min-h-9 text-xs gap-1.5">
+            <Download size={11} /> Export Pack
+          </button>
+        </div>
       </div>
 
       {prompts.map((prompt, sceneIdx) => (
@@ -54,9 +73,9 @@ export default function PromptOutputPanel({ prompts }: Props) {
             <button
               onClick={() => {
                 const text = sections.map(s => `${s.label}\n${prompt[s.key] || ''}`).join('\n\n');
-                navigator.clipboard.writeText(text);
+                copyText(text);
               }}
-              className="text-[10px] text-gray-500 hover:text-white transition-colors"
+              className="rounded px-2 py-1 text-[10px] text-gray-500 transition-colors hover:bg-white/[0.04] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
             >
               Copy scene
             </button>
@@ -70,29 +89,38 @@ export default function PromptOutputPanel({ prompts }: Props) {
               return (
                 <div
                   key={section.key}
+                  data-prompt-section={section.key}
                   className={`rounded-lg border overflow-hidden ${section.color}`}
                 >
-                  <button
-                    onClick={() => toggleSection(`${sceneIdx}-${section.key}`)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-left"
-                  >
-                    <div>
-                      <span className="text-[10px] font-semibold tracking-wider">{section.label}</span>
-                      <span className="text-[9px] text-gray-500 ml-2">{section.desc}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
+                  <div className="flex w-full items-center justify-between gap-2 px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() => toggleSection(`${sceneIdx}-${section.key}`)}
+                      className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+                      aria-expanded={isExpanded}
+                    >
+                      <span className="block text-[10px] font-semibold tracking-wider">{section.label}</span>
+                      <span className="mt-0.5 block truncate text-[9px] text-gray-500">{section.desc}</span>
+                    </button>
+                    <div className="flex flex-shrink-0 items-center gap-2">
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(content || '');
-                        }}
-                        className="text-[9px] text-gray-500 hover:text-white"
+                        type="button"
+                        aria-label={`Copy ${section.label.toLowerCase()}`}
+                        onClick={() => copyText(content || '')}
+                        className="rounded p-1 text-gray-500 hover:bg-white/[0.05] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
                       >
-                        <Copy size={10} />
+                        <Copy size={12} />
                       </button>
-                      {isExpanded ? <ChevronDown size={11} className="text-gray-500" /> : <ChevronRight size={11} className="text-gray-500" />}
+                      <button
+                        type="button"
+                        aria-label={isExpanded ? 'Collapse section' : 'Expand section'}
+                        onClick={() => toggleSection(`${sceneIdx}-${section.key}`)}
+                        className="rounded p-1 text-gray-500 hover:bg-white/[0.05] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60"
+                      >
+                        {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                      </button>
                     </div>
-                  </button>
+                  </div>
                   <AnimatePresence initial={false}>
                     {isExpanded && (
                       <motion.div
@@ -102,8 +130,8 @@ export default function PromptOutputPanel({ prompts }: Props) {
                         transition={{ duration: 0.15 }}
                       >
                         <div className="px-3 pb-2">
-                          <div className="bg-black/30 rounded p-2">
-                            <code className="text-[10px] text-gray-300 font-mono leading-relaxed whitespace-pre-wrap break-all">
+                          <div className="rounded bg-black/30 p-2">
+                            <code className="block whitespace-pre-wrap break-words font-mono text-[10px] leading-relaxed text-gray-300">
                               {content || 'N/A'}
                             </code>
                           </div>

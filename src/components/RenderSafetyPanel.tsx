@@ -8,14 +8,13 @@ interface Props {
 
 function ScoreBar({ score }: { score: number }) {
   const color = score >= 75 ? 'from-emerald-500 to-emerald-400' : score >= 45 ? 'from-amber-500 to-amber-400' : 'from-rose-500 to-rose-400';
-  const glow = score >= 75 ? 'shadow-emerald-500/20' : score >= 45 ? 'shadow-amber-500/20' : 'shadow-rose-500/20';
   return (
-    <div className="w-full h-1.5 bg-white/[0.06] rounded-full overflow-hidden mt-1 shadow-inner">
+    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.07] shadow-inner">
       <motion.div
         initial={{ width: 0 }}
         animate={{ width: `${score}%` }}
         transition={{ duration: 0.8, ease: 'easeOut' }}
-        className={`h-full rounded-full bg-gradient-to-r ${color} shadow-sm ${glow}`}
+        className={`h-full rounded-full bg-gradient-to-r ${color}`}
       />
     </div>
   );
@@ -41,13 +40,13 @@ export default function RenderSafetyPanel({ results }: Props) {
       </div>
       <div className="space-y-2.5">
         {results.map((item) => (
-          <div key={item.label}>
-            <div className="flex items-center justify-between text-[11px]">
-              <div className="flex items-center gap-1.5">
+          <div key={item.label} className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-1.5">
                 {severityIcon(item.severity)}
-                <span className="text-gray-400">{item.label}</span>
+                <span className="truncate text-[11px] text-gray-300">{item.label}</span>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex flex-shrink-0 items-center gap-1.5 text-[11px]">
                 <span className="font-mono text-gray-500 text-[10px]">{item.score}%</span>
                 {severityLabel(item.severity)}
               </div>

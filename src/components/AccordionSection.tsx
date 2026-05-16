@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useId, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface AccordionSectionProps {
@@ -10,22 +10,18 @@ interface AccordionSectionProps {
 
 export default function AccordionSection({ title, defaultOpen = true, children }: AccordionSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [contentHeight, setContentHeight] = useState(0);
-
-  useEffect(() => {
-    if (contentRef.current) {
-      setContentHeight(contentRef.current.scrollHeight);
-    }
-  }, [children]);
+  const contentId = useId();
 
   return (
     <div className="glass-panel overflow-hidden">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between p-4 text-left hover:bg-white/[0.02] transition-colors"
+        aria-expanded={open}
+        aria-controls={contentId}
+        className="flex min-h-12 w-full items-center justify-between gap-3 p-4 text-left transition-colors hover:bg-white/[0.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-400/60"
       >
-        <span className="section-label mb-0">{title}</span>
+        <span className="section-label mb-0 truncate">{title}</span>
         <motion.div animate={{ rotate: open ? 0 : -90 }} transition={{ duration: 0.2 }}>
           <ChevronDown size={14} className="text-gray-500" />
         </motion.div>
@@ -34,6 +30,7 @@ export default function AccordionSection({ title, defaultOpen = true, children }
         {open && (
           <motion.div
             key="content"
+            id={contentId}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}

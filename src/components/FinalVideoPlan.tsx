@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { Film, Clock, Maximize, Activity, Shield, CheckCircle2, ArrowRight, Sparkles } from 'lucide-react';
-import { WorkflowCase, WorkflowCaseInfo } from '../types';
+import { WorkflowCase } from '../types';
 import { getCaseInfo } from '../lib/workflowCases';
 
 interface Props {
@@ -26,34 +26,34 @@ export default function FinalVideoPlan({ caseId, numScenes, duration, aspectRati
         <div className="section-label mb-0">Final Video Plan</div>
       </div>
 
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-        <div className="flex items-center justify-between">
-          <span className="text-gray-500 flex items-center gap-1"><Film size={10} /> Workflow</span>
-          <span className="text-white font-medium">{info.title}</span>
+      <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+        <div className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5 sm:col-span-2">
+          <span className="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-[0.12em] text-gray-500"><Film size={10} /> Workflow</span>
+          <span className="block truncate font-medium text-white">{info.title}</span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5">
           <span className="text-gray-500 flex items-center gap-1"><Activity size={10} /> Panels</span>
           <span className="text-white font-medium">{info.panels}</span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5">
           <span className="text-gray-500 flex items-center gap-1"><Clock size={10} /> Duration</span>
           <span className="text-white font-medium">~{numScenes * duration}s</span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5">
           <span className="text-gray-500 flex items-center gap-1"><Maximize size={10} /> Aspect</span>
           <span className="text-white font-medium">{aspectRatio}</span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5">
           <span className="text-gray-500 flex items-center gap-1"><Activity size={10} /> Motion</span>
           <span className={`font-medium ${motionLevel > 70 ? 'text-amber-400' : 'text-emerald-400'}`}>
             {motionLevel > 70 ? 'High' : motionLevel > 40 ? 'Medium' : 'Low'}
           </span>
         </div>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] p-2.5">
           <span className="text-gray-500 flex items-center gap-1"><Shield size={10} /> Stability</span>
           <span className="text-emerald-400 font-medium">{info.stability}%</span>
         </div>
-        <div className="flex items-center justify-between col-span-2 pt-1 border-t border-white/[0.06]">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/15 bg-emerald-500/[0.05] p-2.5">
           <span className="text-gray-500 flex items-center gap-1"><Sparkles size={10} /> Seedance</span>
           <span className="text-emerald-400 font-medium flex items-center gap-1">
             <CheckCircle2 size={10} /> Optimized

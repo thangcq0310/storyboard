@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Code, Sparkles } from 'lucide-react';
 
@@ -14,6 +15,12 @@ interface Props {
 }
 
 export default function PromptArchitecturePanel({ onTagClick }: Props) {
+  const [activeLabel, setActiveLabel] = useState('Cinematic Style');
+  const handleClick = (label: string) => {
+    setActiveLabel(label);
+    onTagClick(label);
+  };
+
   return (
     <div className="glass-panel p-4">
       <div className="section-label mb-3 flex items-center gap-1.5">
@@ -28,8 +35,10 @@ export default function PromptArchitecturePanel({ onTagClick }: Props) {
           {architectureItems.map((item, idx) => (
             <button
               key={`row-${item.label}`}
-              onClick={() => onTagClick(item.label)}
-              className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[10px] text-gray-400 transition-colors hover:bg-white/[0.04] hover:text-white"
+              onClick={() => handleClick(item.label)}
+              className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-[10px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 ${
+                activeLabel === item.label ? 'bg-violet-500/12 text-violet-100' : 'text-gray-400 hover:bg-white/[0.04] hover:text-white'
+              }`}
             >
               <span>{idx + 1}. {item.label}</span>
               <span className="h-1.5 w-10 rounded-full bg-gradient-to-r from-violet-500/60 to-blue-500/20" />
@@ -43,8 +52,10 @@ export default function PromptArchitecturePanel({ onTagClick }: Props) {
             key={item.label}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => onTagClick(item.label)}
-            className={`px-2.5 py-1 rounded-full text-[10px] font-medium border cursor-pointer hover:opacity-80 transition-opacity ${item.color}`}
+            onClick={() => handleClick(item.label)}
+            className={`cursor-pointer rounded-full border px-2.5 py-1 text-[10px] font-medium transition-[opacity,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 hover:opacity-90 ${
+              activeLabel === item.label ? 'shadow-[0_0_18px_rgba(124,58,237,0.18)] ring-1 ring-white/15' : ''
+            } ${item.color}`}
           >
             {item.label}
           </motion.button>

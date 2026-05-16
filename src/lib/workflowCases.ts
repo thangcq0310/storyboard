@@ -37,7 +37,7 @@ export const WORKFLOW_CASES: WorkflowCaseInfo[] = [
   {
     id: 'case19',
     title: 'Storyboard-First Cost Control',
-    panels: 4,
+    panels: 8,
     description: 'Budget-optimized workflow with minimal render passes',
     tags: ['Budget', 'Efficient', 'Minimal'],
     match: 88,

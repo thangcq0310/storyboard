@@ -24,8 +24,8 @@
 @layer components {
   .glass-panel {
     background: rgba(255,255,255,0.03);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 12px;
   }
@@ -94,6 +94,12 @@
     cursor: pointer;
   }
   .btn-ghost:hover { background: rgba(255,255,255,0.04); color: white; }
+  .btn-ghost:focus-visible,
+  .btn-primary:focus-visible,
+  .btn-secondary:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(167,139,250,0.7), 0 0 0 4px rgba(10,10,15,0.9);
+  }
 
   .input-field {
     width: 100%;
@@ -156,7 +162,7 @@
     position: relative;
   }
   .tab-btn:hover { color: white; background: rgba(255,255,255,0.04); }
-  .tab-btn.active { color: white; background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.2); }
+  .tab-btn[aria-selected="true"] { color: white; }
 
   .custom-scrollbar { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) transparent; }
   .custom-scrollbar::-webkit-scrollbar { width: 4px; }
@@ -180,4 +186,15 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 50%;
   background: linear-gradient(135deg, #7c3aed, #6366f1);
   box-shadow: 0 0 12px rgba(124,58,237,0.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

@@ -417,6 +417,18 @@ function App() {
   // ── Prompt architecture click → switch to prompts tab ──
   const handlePromptTagClick = (label: string) => {
     setActiveTab('prompts');
+    const sectionMap: Record<string, string> = {
+      'Cinematic Style': 'style',
+      'Camera Direction': 'camera',
+      'Subject Consistency': 'system',
+      'Motion Guidance': 'motion',
+      'Lighting Control': 'style',
+    };
+    window.setTimeout(() => {
+      document
+        .querySelector(`[data-prompt-section="${sectionMap[label] || 'style'}"]`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 120);
   };
 
   const getProvider = (providerId: ProviderId) =>
@@ -516,7 +528,7 @@ function App() {
         style={{ minHeight: 'calc(100vh - 190px)' }}
       >
         {/* ═══ LEFT PANEL (35%) ═══ */}
-        <div className="w-full lg:w-[35%] space-y-3">
+        <div className="order-2 w-full space-y-3 lg:order-1 lg:w-[35%]">
           {/* Recent Workflows */}
           <RecentWorkflows items={recentWorkflows} onLoad={loadWorkflow} />
 
@@ -647,11 +659,12 @@ function App() {
           {/* ── STICKY GENERATE BUTTON ── */}
           <div className="sticky bottom-4 pt-2">
             <button
-              className="relative w-full py-3 rounded-xl font-semibold text-sm text-white overflow-hidden group
+              className="group relative min-h-[48px] w-full overflow-hidden rounded-xl px-4 py-3 text-sm font-semibold text-white
                 bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600
                 hover:from-violet-500 hover:via-indigo-500 hover:to-blue-500
                 disabled:opacity-40 disabled:cursor-not-allowed
-                transition-all duration-300 shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40"
+                transition-[background,box-shadow,opacity] duration-300 shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40
+                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0f]"
               onClick={handleGenerateStoryboard}
               disabled={isProcessing || !storyIdea.trim()}
             >
@@ -679,12 +692,12 @@ function App() {
         </div>
 
         {/* ═══ RIGHT PANEL (65%) ═══ */}
-        <div className="flex-1 min-w-0 space-y-4">
+        <div className="order-1 min-w-0 flex-1 space-y-4 lg:order-2">
           <TabBar active={activeTab} onChange={setActiveTab} />
 
           {/* ── STORYBOARD TAB ── */}
           {activeTab === 'storyboard' && (
-            <div className="space-y-4">
+            <div id="panel-storyboard" role="tabpanel" aria-labelledby="tab-storyboard" className="space-y-4">
               {/* Storyboard Preview */}
               <StoryboardPreview
                 scenes={scenes}
@@ -723,7 +736,7 @@ function App() {
 
           {/* ── VIDEO MOTION TAB ── */}
           {activeTab === 'video-motion' && (
-            <div className="space-y-4">
+            <div id="panel-video-motion" role="tabpanel" aria-labelledby="tab-video-motion" className="space-y-4">
               <div className="glass-panel p-4">
                 <div className="section-label mb-3">Animation Motion</div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -816,7 +829,7 @@ function App() {
 
           {/* ── SHOTLIST TAB ── */}
           {activeTab === 'shotlist' && (
-            <div className="glass-panel p-4">
+            <div id="panel-shotlist" role="tabpanel" aria-labelledby="tab-shotlist" className="glass-panel p-4">
               <div className="section-label mb-3">Shot List</div>
               {scenes.filter(s => selectedImages[s.id]).length > 0 ? (
                 <div className="space-y-2">
@@ -841,18 +854,22 @@ function App() {
 
           {/* ── PROMPTS TAB ── */}
           {activeTab === 'prompts' && (
-            <PromptOutputPanel prompts={builtPrompts} />
+            <div id="panel-prompts" role="tabpanel" aria-labelledby="tab-prompts">
+              <PromptOutputPanel prompts={builtPrompts} />
+            </div>
           )}
 
           {/* ── EXPORT TAB ── */}
           {activeTab === 'export' && (
-            <ExportPanel
-              scenes={scenes.filter(s => selectedImages[s.id])}
-              storyIdea={storyIdea}
-              artStyle={artStyle}
-              imageModel={imageModel}
-              videoModel={videoModel}
-            />
+            <div id="panel-export" role="tabpanel" aria-labelledby="tab-export">
+              <ExportPanel
+                scenes={scenes.filter(s => selectedImages[s.id])}
+                storyIdea={storyIdea}
+                artStyle={artStyle}
+                imageModel={imageModel}
+                videoModel={videoModel}
+              />
+            </div>
           )}
         </div>
       </div>
