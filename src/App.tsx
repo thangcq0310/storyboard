@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Copy, Settings2, Sparkles } from 'lucide-react';
 
 import type { Scene, WorkflowCase } from './types';
@@ -8,7 +8,8 @@ import { analyzeVideoProfile } from './lib/caseRouter';
 import { analyzeSafety } from './lib/safetyAnalyzer';
 import { buildAllPrompts } from './lib/promptBuilder';
 import { WORKFLOW_CASES, getCaseInfo } from './lib/workflowCases';
-import { PROMPT_SETS, getPromptSet, type PromptSetId } from './lib/promptSets';
+import { getPromptSet } from './lib/promptSets';
+import { useWorkflowState } from './lib/useWorkflowState';
 
 import StoryboardPreview from './components/StoryboardPreview';
 import AIReasoningPanel from './components/AIReasoningPanel';
@@ -19,6 +20,7 @@ import PromptOutputPanel from './components/PromptOutputPanel';
 import AccordionSection from './components/AccordionSection';
 import ExportPanel from './components/ExportPanel';
 import SettingsModal from './components/SettingsModal';
+import WorkflowSettingsForm from './components/WorkflowSettingsForm';
 
 type OutputTab = 'storyboard' | 'seedance' | 'shotlist' | 'export';
 
@@ -26,29 +28,10 @@ function App() {
   const apiClient = useRef(initApiClient());
 
   const [showSettings, setShowSettings] = useState(false);
-
   const [workflowCase, setWorkflowCase] = useState<WorkflowCase | null>(null);
-  const [storyIdea, setStoryIdea] = useState('');
-  const [subject, setSubject] = useState('');
-  const [environment, setEnvironment] = useState('');
-  const [artStyle, setArtStyle] = useState('Cinematic');
-  const [mood, setMood] = useState('Dramatic');
-  const [duration, setDuration] = useState(8);
-  const [motionLevel] = useState(55);
-  const [aspectRatio, setAspectRatio] = useState<'16:9' | '9:16' | '1:1'>('16:9');
-  const [platform, setPlatform] = useState('YouTube');
-
-  const [cinematicStylePrompt, setCinematicStylePrompt] = useState('');
-  const [cameraPrompt, setCameraPrompt] = useState('');
-  const [motionPrompt, setMotionPrompt] = useState('');
-  const [negativePrompt, setNegativePrompt] = useState('');
-  const [additionalInstruction, setAdditionalInstruction] = useState('');
-  const [promptSet, setPromptSet] = useState<PromptSetId>('custom');
-
-  const [language, setLanguage] = useState('English');
-  const [detailLevel, setDetailLevel] = useState('Detailed');
-  const [generateShotlist, setGenerateShotlist] = useState(true);
-  const [generateSeedancePrompt, setGenerateSeedancePrompt] = useState(true);
+  
+  const { state, updateState } = useWorkflowState();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const [imageProvider, setImageProvider] = useState<ProviderId>(() => apiClient.current.getModelConfig().imageProvider);
   const [imageModel, setImageModel] = useState(() => apiClient.current.getModelConfig().imageModel);
@@ -59,45 +42,35 @@ function App() {
   const [selectedImages, setSelectedImages] = useState<Record<string, boolean>>({});
   const [outputTab, setOutputTab] = useState<OutputTab>('storyboard');
 
-  const activePromptSet = getPromptSet(promptSet);
-
-  useEffect(() => {
-    if (promptSet === 'custom') return;
-    const preset = getPromptSet(promptSet);
-    setCinematicStylePrompt(preset.cinematicStylePrompt);
-    setCameraPrompt(preset.cameraPrompt);
-    setMotionPrompt(preset.motionPrompt);
-    setNegativePrompt(preset.negativePrompt);
-    setAdditionalInstruction(preset.additionalInstruction);
-  }, [promptSet]);
+  const activePromptSet = getPromptSet(state.promptSet);
 
   const aiAnalysis = useMemo(
     () => {
       const activeCase = workflowCase || 'case1';
-      return analyzeVideoProfile(mood, motionLevel, duration, getCaseInfo(activeCase).panels, activeCase === 'case19');
+      return analyzeVideoProfile(state.mood, state.motionLevel, state.duration, getCaseInfo(activeCase).panels, activeCase === 'case19');
     },
-    [mood, motionLevel, duration, workflowCase],
+    [state.mood, state.motionLevel, state.duration, workflowCase],
   );
 
   const safetyResults = useMemo(
     () => {
       const activeCase = workflowCase || 'case1';
-      return analyzeSafety(motionLevel, duration, getCaseInfo(activeCase).panels, activeCase === 'case19');
+      return analyzeSafety(state.motionLevel, state.duration, getCaseInfo(activeCase).panels, activeCase === 'case19');
     },
-    [motionLevel, duration, workflowCase],
+    [state.motionLevel, state.duration, workflowCase],
   );
 
   const builtPrompts = useMemo(
-    () => buildAllPrompts(scenes, artStyle, mood, workflowCase || 'case1').map((prompt) => ({
+    () => buildAllPrompts(scenes, state.artStyle, state.mood, workflowCase || 'case1').map((prompt) => ({
       ...prompt,
-      negative: negativePrompt || prompt.negative,
+      negative: state.negativePrompt || prompt.negative,
     })),
-    [scenes, artStyle, mood, workflowCase, negativePrompt],
+    [scenes, state.artStyle, state.mood, workflowCase, state.negativePrompt],
   );
 
   const selectedWorkflow = workflowCase ? getCaseInfo(workflowCase) : null;
   const storyboardPromptText = builtPrompts.map((prompt, idx) => (
-    `Scene ${idx + 1}\nSYSTEM: ${prompt.system}\nSTYLE: ${prompt.style}\nCAMERA: ${prompt.camera}\nMOTION: ${prompt.motion}\nNEGATIVE: ${negativePrompt || prompt.negative}`
+    `Scene ${idx + 1}\nSYSTEM: ${prompt.system}\nSTYLE: ${prompt.style}\nCAMERA: ${prompt.camera}\nMOTION: ${prompt.motion}\nNEGATIVE: ${state.negativePrompt || prompt.negative}`
   )).join('\n\n---\n\n');
   const seedancePromptText = builtPrompts.map((prompt, idx) => `Scene ${idx + 1}: ${prompt.seedance || ''}`).join('\n\n');
 
@@ -138,37 +111,43 @@ function App() {
   const handleGenerateWorkflow = () => {
     if (!selectedWorkflow || !workflowCase) return;
 
-    const panelCount = selectedWorkflow.panels;
-    const generatedScenes: Scene[] = Array.from({ length: panelCount }).map((_, idx) => {
-      const beatLabel = idx === 0 ? 'Opening beat' : idx === panelCount - 1 ? 'Closing beat' : `Beat ${idx + 1}`;
-      const promptParts = [
-        `${beatLabel}: ${storyIdea || 'Untitled storyboard idea'}`,
-        subject ? `Subject: ${subject}` : '',
-        environment ? `Setting: ${environment}` : '',
-        `Visual style: ${artStyle}`,
-        `Mood: ${mood}`,
-        `Duration: ${duration}s`,
-        `Aspect ratio: ${aspectRatio}`,
-        `Platform: ${platform}`,
-        `Language: ${language}`,
-        `Detail level: ${detailLevel}`,
-        `Prompt set: ${activePromptSet.label}`,
-        cinematicStylePrompt ? `Cinematic style prompt: ${cinematicStylePrompt}` : '',
-        cameraPrompt ? `Camera prompt: ${cameraPrompt}` : '',
-        motionPrompt ? `Motion prompt: ${motionPrompt}` : '',
-        additionalInstruction ? `Additional instruction: ${additionalInstruction}` : '',
-      ].filter(Boolean);
+    setIsGenerating(true);
 
-      return {
-        id: `scene-${idx + 1}`,
-        description: `${beatLabel} for ${subject || 'the subject'} in ${environment || 'the selected setting'}`,
-        prompt: promptParts.join('. '),
-      };
-    });
+    // Simulate a brief loading state for better UX
+    setTimeout(() => {
+      const panelCount = selectedWorkflow.panels;
+      const generatedScenes: Scene[] = Array.from({ length: panelCount }).map((_, idx) => {
+        const beatLabel = idx === 0 ? 'Opening beat' : idx === panelCount - 1 ? 'Closing beat' : `Beat ${idx + 1}`;
+        const promptParts = [
+          `${beatLabel}: ${state.storyIdea || 'Untitled storyboard idea'}`,
+          state.subject ? `Subject: ${state.subject}` : '',
+          state.environment ? `Setting: ${state.environment}` : '',
+          `Visual style: ${state.artStyle}`,
+          `Mood: ${state.mood}`,
+          `Duration: ${state.duration}s`,
+          `Aspect ratio: ${state.aspectRatio}`,
+          `Platform: ${state.platform}`,
+          `Language: ${state.language}`,
+          `Detail level: ${state.detailLevel}`,
+          `Prompt set: ${activePromptSet.label}`,
+          state.cinematicStylePrompt ? `Cinematic style prompt: ${state.cinematicStylePrompt}` : '',
+          state.cameraPrompt ? `Camera prompt: ${state.cameraPrompt}` : '',
+          state.motionPrompt ? `Motion prompt: ${state.motionPrompt}` : '',
+          state.additionalInstruction ? `Additional instruction: ${state.additionalInstruction}` : '',
+        ].filter(Boolean);
 
-    setScenes(generatedScenes);
-    setSelectedImages(Object.fromEntries(generatedScenes.map((scene) => [scene.id, true])));
-    setOutputTab('storyboard');
+        return {
+          id: `scene-${idx + 1}`,
+          description: `${beatLabel} for ${state.subject || 'the subject'} in ${state.environment || 'the selected setting'}`,
+          prompt: promptParts.join('. '),
+        };
+      });
+
+      setScenes(generatedScenes);
+      setSelectedImages(Object.fromEntries(generatedScenes.map((scene) => [scene.id, true])));
+      setOutputTab('storyboard');
+      setIsGenerating(false);
+    }, 600);
   };
 
   const toggleImageSelect = (id: string) => setSelectedImages((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -238,111 +217,13 @@ function App() {
 
         <section className="glass-panel p-4">
           {selectedWorkflow ? (
-            <>
-              <div className="mb-4 flex items-start justify-between gap-3">
-                <div>
-                  <div className="section-label mb-1">Steps 2-4</div>
-                  <h2 className="text-base font-semibold">Enter Idea & Settings</h2>
-                  <p className="mt-1 text-xs text-gray-500">Only the fields needed to generate this workflow.</p>
-                </div>
-                <div className="badge-violet text-[10px]">{selectedWorkflow.panels} panels</div>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="mb-1 block text-[11px] font-medium text-gray-400">Main idea</label>
-                  <textarea className="input-field min-h-[92px] resize-none text-sm" value={storyIdea} onChange={(event) => setStoryIdea(event.target.value)} placeholder="Describe the video idea..." />
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label className="mb-1 block text-[11px] font-medium text-gray-400">Subject</label>
-                    <input className="input-field text-sm" value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Main character or product" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-[11px] font-medium text-gray-400">Setting / Environment</label>
-                    <input className="input-field text-sm" value={environment} onChange={(event) => setEnvironment(event.target.value)} placeholder="Location and atmosphere" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Mood</span>
-                    <select className="select-field text-sm" value={mood} onChange={(event) => setMood(event.target.value)} aria-label="Mood">
-                      <option>Dramatic</option><option>Joyful</option><option>Mysterious</option><option>Melancholic</option><option>Energetic</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Visual style</span>
-                    <select className="select-field text-sm" value={artStyle} onChange={(event) => setArtStyle(event.target.value)} aria-label="Visual style">
-                      <option>Cinematic</option><option>Anime</option><option>Realistic</option><option>Abstract</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Duration</span>
-                    <input className="input-field text-sm" type="number" min={3} max={60} value={duration} onChange={(event) => setDuration(Number(event.target.value))} aria-label="Duration" />
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Aspect ratio</span>
-                    <select className="select-field text-sm" value={aspectRatio} onChange={(event) => setAspectRatio(event.target.value as '16:9' | '9:16' | '1:1')} aria-label="Aspect ratio">
-                      <option value="16:9">16:9</option><option value="9:16">9:16</option><option value="1:1">1:1</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Platform</span>
-                    <select className="select-field text-sm" value={platform} onChange={(event) => setPlatform(event.target.value)} aria-label="Platform">
-                      <option>YouTube</option><option>TikTok</option><option>Instagram</option><option>Web</option>
-                    </select>
-                  </label>
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Detail level</span>
-                    <select className="select-field text-sm" value={detailLevel} onChange={(event) => setDetailLevel(event.target.value)} aria-label="Detail level">
-                      <option>Concise</option><option>Detailed</option><option>Production-grade</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div className="rounded-xl border border-white/[0.07] bg-white/[0.025] p-3">
-                  <div className="mb-3 text-xs font-semibold text-white">Prompt Details</div>
-                  <label className="mb-3 block">
-                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Prompt set</span>
-                    <select className="select-field text-sm" value={promptSet} onChange={(event) => setPromptSet(event.target.value as PromptSetId)} aria-label="Prompt set">
-                      {PROMPT_SETS.map((preset) => (
-                        <option key={preset.id} value={preset.id}>{preset.label}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="mb-3 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2 text-[11px] text-gray-400">
-                    <span className="block font-medium text-gray-200">{activePromptSet.category}</span>
-                    <span className="block mt-0.5">{activePromptSet.description}</span>
-                  </div>
-                  <div className="space-y-3">
-                    <input className="input-field text-sm" value={cinematicStylePrompt} onChange={(event) => setCinematicStylePrompt(event.target.value)} placeholder="Cinematic style prompt" />
-                    <input className="input-field text-sm" value={cameraPrompt} onChange={(event) => setCameraPrompt(event.target.value)} placeholder="Camera prompt" />
-                    <input className="input-field text-sm" value={motionPrompt} onChange={(event) => setMotionPrompt(event.target.value)} placeholder="Motion prompt" />
-                    <input className="input-field text-sm" value={negativePrompt} onChange={(event) => setNegativePrompt(event.target.value)} placeholder="Negative prompt" />
-                    <textarea className="input-field min-h-[72px] resize-none text-sm" value={additionalInstruction} onChange={(event) => setAdditionalInstruction(event.target.value)} placeholder="Additional instruction" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1 block text-[11px] font-medium text-gray-400">Language</span>
-                    <select className="select-field text-sm" value={language} onChange={(event) => setLanguage(event.target.value)} aria-label="Language">
-                      <option>English</option><option>Vietnamese</option><option>Japanese</option><option>Korean</option>
-                    </select>
-                  </label>
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => setGenerateShotlist(!generateShotlist)} className={`rounded-lg border px-3 py-2 text-xs ${generateShotlist ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200' : 'border-white/[0.07] text-gray-500'}`}>Shotlist {generateShotlist ? 'On' : 'Off'}</button>
-                  <button type="button" onClick={() => setGenerateSeedancePrompt(!generateSeedancePrompt)} className={`rounded-lg border px-3 py-2 text-xs ${generateSeedancePrompt ? 'border-violet-500/30 bg-violet-500/10 text-violet-200' : 'border-white/[0.07] text-gray-500'}`}>Seedance {generateSeedancePrompt ? 'On' : 'Off'}</button>
-                </div>
-
-                <button className="btn-primary min-h-[48px] w-full" onClick={handleGenerateWorkflow} disabled={!storyIdea.trim()}>
-                  <Sparkles size={15} /> Generate Workflow
-                </button>
-              </div>
-            </>
+            <WorkflowSettingsForm
+              state={state}
+              updateState={updateState}
+              panelCount={selectedWorkflow.panels}
+              onGenerate={handleGenerateWorkflow}
+              isGenerating={isGenerating}
+            />
           ) : (
             <div className="flex min-h-[320px] flex-col items-center justify-center rounded-xl border border-dashed border-white/[0.08] bg-white/[0.02] p-6 text-center">
               <Sparkles size={22} className="mb-3 text-violet-300" />
@@ -366,7 +247,7 @@ function App() {
                   </button>
                 </div>
 
-                <StoryboardPreview scenes={scenes} caseId={workflowCase} selectedImages={selectedImages} onToggleSelect={toggleImageSelect} isGenerating={false} generationProgress={100} />
+                <StoryboardPreview scenes={scenes} caseId={workflowCase} selectedImages={selectedImages} onToggleSelect={toggleImageSelect} isGenerating={isGenerating} generationProgress={isGenerating ? 50 : 100} />
 
                 <div className="mt-4 flex gap-1 overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.025] p-1 custom-scrollbar">
                   {[
@@ -385,12 +266,12 @@ function App() {
                   {outputTab === 'storyboard' && <PromptOutputPanel prompts={builtPrompts} />}
                   {outputTab === 'seedance' && (
                     <div className="rounded-xl border border-white/[0.06] bg-black/25 p-3">
-                      <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-gray-300">{generateSeedancePrompt ? seedancePromptText || 'Generate Workflow to create Seedance prompts.' : 'Seedance prompt generation is disabled in settings.'}</pre>
+                      <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-gray-300">{state.generateSeedancePrompt ? seedancePromptText || 'Generate Workflow to create Seedance prompts.' : 'Seedance prompt generation is disabled in settings.'}</pre>
                     </div>
                   )}
                   {outputTab === 'shotlist' && (
                     <div className="space-y-2">
-                      {generateShotlist ? scenes.map((scene, idx) => (
+                      {state.generateShotlist ? scenes.map((scene, idx) => (
                         <div key={scene.id} className="rounded-lg border border-white/[0.06] bg-white/[0.025] p-3">
                           <div className="text-xs font-semibold text-white">Shot {idx + 1}</div>
                           <div className="mt-1 text-[11px] leading-relaxed text-gray-400">{scene.prompt}</div>
@@ -401,15 +282,15 @@ function App() {
                   {outputTab === 'export' && (
                     <ExportPanel
                       scenes={scenes}
-                      storyIdea={storyIdea}
+                      storyIdea={state.storyIdea}
                       workflowCase={workflowCase}
-                      artStyle={artStyle}
-                      mood={mood}
-                      duration={duration}
-                      aspectRatio={aspectRatio}
-                      platform={platform}
-                      language={language}
-                      detailLevel={detailLevel}
+                      artStyle={state.artStyle}
+                      mood={state.mood}
+                      duration={state.duration}
+                      aspectRatio={state.aspectRatio}
+                      platform={state.platform}
+                      language={state.language}
+                      detailLevel={state.detailLevel}
                       promptSet={activePromptSet.label}
                       imageModel={imageModel}
                       videoModel={videoModel}
