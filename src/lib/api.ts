@@ -1,6 +1,6 @@
 /**
  * FusionFact API Client Module
- * Uses direct Replicate REST API (browser-safe, no Node.js SDK)
+ * Uses Replicate REST API through a same-origin proxy in development.
  */
 
 // ============================================================================
@@ -38,7 +38,10 @@ export interface VideoResult {
 
 const STORAGE_KEY = 'fusionfact_api_key';
 const MODEL_STORAGE_KEY = 'fusionfact_model_config';
-const REPLICATE_API_BASE = 'https://api.replicate.com/v1';
+const REPLICATE_API_BASE = (
+  import.meta.env.VITE_REPLICATE_API_BASE ||
+  (import.meta.env.DEV ? '/api/replicate/v1' : 'https://api.replicate.com/v1')
+).replace(/\/$/, '');
 
 // Model name → Replicate model identifier mapping
 export const IMAGE_MODEL_MAP: Record<string, string> = {
@@ -116,13 +119,60 @@ function extractUrl(data: unknown): string | null {
 // Direct Replicate REST API (browser-safe)
 // ============================================================================
 
+function replicateHeaders(apiKey: string): HeadersInit {
+  return {
+    'Authorization': `Bearer ${apiKey}`,
+    'Content-Type': 'application/json',
+  };
+}
+
+async function parseReplicateError(response: Response): Promise<string> {
+  const body = await response.text().catch(() => '');
+  if (!body) return `${response.status} ${response.statusText}`.trim();
+  try {
+    const json = JSON.parse(body) as Record<string, unknown>;
+    const detail = json.detail || json.error || json.message;
+    if (detail) return typeof detail === 'string' ? detail : JSON.stringify(detail);
+  } catch {}
+  return body;
+}
+
+function normalizeNetworkError(err: unknown): string {
+  if (err instanceof TypeError) {
+    return 'Network request failed. In the browser this is usually CORS or an unreachable API proxy.';
+  }
+  return err instanceof Error ? err.message : 'Unknown API error';
+}
+
+export async function testReplicateConnection(apiKey: string): Promise<ApiState<{ ok: true }>> {
+  if (!apiKey.trim()) {
+    return { data: null, isLoading: false, error: 'API key is empty.' };
+  }
+
+  try {
+    const response = await fetch(`${REPLICATE_API_BASE}/predictions?limit=1`, {
+      method: 'GET',
+      headers: replicateHeaders(apiKey.trim()),
+    });
+
+    if (!response.ok) {
+      return {
+        data: null,
+        isLoading: false,
+        error: `Replicate API error ${response.status}: ${await parseReplicateError(response)}`,
+      };
+    }
+
+    return { data: { ok: true }, isLoading: false, error: null };
+  } catch (err) {
+    return { data: null, isLoading: false, error: normalizeNetworkError(err) };
+  }
+}
+
 async function replicatePost(model: string, input: Record<string, unknown>, apiKey: string): Promise<unknown> {
   const response = await fetch(`${REPLICATE_API_BASE}/predictions`, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: replicateHeaders(apiKey),
     body: JSON.stringify({
       version: model,
       input,
@@ -130,8 +180,7 @@ async function replicatePost(model: string, input: Record<string, unknown>, apiK
   });
 
   if (!response.ok) {
-    const errBody = await response.text().catch(() => '');
-    throw new Error(`Replicate API error ${response.status}: ${errBody}`);
+    throw new Error(`Replicate API error ${response.status}: ${await parseReplicateError(response)}`);
   }
 
   const prediction = await response.json();
@@ -141,13 +190,11 @@ async function replicatePost(model: string, input: Record<string, unknown>, apiK
 async function waitForReplicatePrediction(predictionId: string, apiKey: string): Promise<unknown> {
   for (let attempt = 0; attempt < 120; attempt++) {
     const response = await fetch(`${REPLICATE_API_BASE}/predictions/${predictionId}`, {
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-      },
+      headers: replicateHeaders(apiKey),
     });
 
     if (!response.ok) {
-      throw new Error(`Polling failed: ${response.status}`);
+      throw new Error(`Polling failed ${response.status}: ${await parseReplicateError(response)}`);
     }
 
     const prediction = await response.json();
@@ -185,8 +232,12 @@ export class ImageAPI {
     this.apiKey = key;
   }
 
+  clearApiKey(): void {
+    this.apiKey = null;
+  }
+
   isConfigured(): boolean {
-    return this.apiKey !== null;
+    return !!this.apiKey?.trim();
   }
 
   async generateImage(
@@ -222,7 +273,7 @@ export class ImageAPI {
       return {
         data: null,
         isLoading: false,
-        error: err instanceof Error ? err.message : 'Unknown error',
+        error: normalizeNetworkError(err),
       };
     }
   }
@@ -244,8 +295,12 @@ export class VideoAPI {
     this.apiKey = key;
   }
 
+  clearApiKey(): void {
+    this.apiKey = null;
+  }
+
   isConfigured(): boolean {
-    return this.apiKey !== null;
+    return !!this.apiKey?.trim();
   }
 
   async generateVideo(
@@ -285,7 +340,7 @@ export class VideoAPI {
       return {
         data: null,
         isLoading: false,
-        error: err instanceof Error ? err.message : 'Unknown error',
+        error: normalizeNetworkError(err),
       };
     }
   }
@@ -302,6 +357,7 @@ export interface ApiClient {
   setApiKey: (key: string) => void;
   clearApiKey: () => void;
   isConfigured: () => boolean;
+  testConnection: (apiKey?: string) => Promise<ApiState<{ ok: true }>>;
   saveModelConfig: (config: ModelConfig) => void;
   getModelConfig: () => ModelConfig;
 }
@@ -325,8 +381,11 @@ export function initApiClient(apiKey?: string): ApiClient {
     },
     clearApiKey: () => {
       clearApiKey();
+      imageApi.clearApiKey();
+      videoApi.clearApiKey();
     },
     isConfigured: () => imageApi.isConfigured() && videoApi.isConfigured(),
+    testConnection: (apiKey?: string) => testReplicateConnection(apiKey || getApiKey() || ''),
     saveModelConfig,
     getModelConfig,
   };

@@ -80,6 +80,14 @@ Open **Settings** inside the app and add a Replicate API key.
 
 The key is stored locally in the browser using `localStorage`.
 
+During local development, Replicate requests are proxied through Vite:
+
+```text
+/api/replicate/v1 -> https://api.replicate.com/v1
+```
+
+This avoids browser CORS issues when running `npm run dev`. For production deployments, configure a backend or hosting proxy for the same route, or provide `VITE_REPLICATE_API_BASE` with a same-origin API proxy URL.
+
 ## Project Structure
 
 ```text

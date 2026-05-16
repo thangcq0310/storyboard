@@ -1,6 +1,6 @@
-import { useRef, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Settings2, Key, Wifi, WifiOff, Check, X, Save } from 'lucide-react';
+import { Settings2, Key, Wifi, WifiOff, X, Save, Loader2, AlertTriangle } from 'lucide-react';
 import { ApiClient } from '../lib/api';
 
 interface Props {
@@ -21,9 +21,10 @@ export default function SettingsModal({
   onVideoModelChange,
 }: Props) {
   const [apiKeyInput, setApiKeyInput] = useState(client.current.getApiKey() || '');
-  const [apiStatus, setApiStatus] = useState<'connected' | 'disconnected'>(() =>
+  const [apiStatus, setApiStatus] = useState<'connected' | 'disconnected' | 'checking' | 'error'>(() =>
     client.current.isConfigured() ? 'connected' : 'disconnected'
   );
+  const [apiMessage, setApiMessage] = useState('');
 
   useEffect(() => {
     if (client.current.isConfigured()) {
@@ -31,14 +32,49 @@ export default function SettingsModal({
     }
   }, []);
 
-  const handleSave = () => {
-    if (apiKeyInput.length > 0) {
-      client.current.setApiKey(apiKeyInput.trim());
-      client.current.saveModelConfig({ imageModel, videoModel });
-      setApiStatus('connected');
-      onClose();
+  const handleSave = async () => {
+    const key = apiKeyInput.trim();
+    if (!key) return;
+
+    setApiStatus('checking');
+    setApiMessage('Testing Replicate connection...');
+
+    const result = await client.current.testConnection(key);
+    if (result.error) {
+      setApiStatus('error');
+      setApiMessage(result.error);
+      return;
     }
+
+    client.current.setApiKey(key);
+    client.current.saveModelConfig({ imageModel, videoModel });
+    setApiStatus('connected');
+    setApiMessage('Replicate connection verified.');
+    onClose();
   };
+
+  const statusConfig = {
+    connected: {
+      icon: <Wifi size={12} className="text-emerald-400" />,
+      label: 'Connected',
+      className: 'text-emerald-400',
+    },
+    disconnected: {
+      icon: <WifiOff size={12} className="text-red-400" />,
+      label: 'Disconnected',
+      className: 'text-red-400',
+    },
+    checking: {
+      icon: <Loader2 size={12} className="text-violet-400 animate-spin" />,
+      label: 'Checking connection',
+      className: 'text-violet-300',
+    },
+    error: {
+      icon: <AlertTriangle size={12} className="text-amber-400" />,
+      label: 'Connection failed',
+      className: 'text-amber-400',
+    },
+  }[apiStatus];
 
   return (
     <motion.div
@@ -107,24 +143,34 @@ export default function SettingsModal({
               className="input-field"
               placeholder="r8_xxx..."
               value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
+              onChange={(e) => {
+                setApiKeyInput(e.target.value);
+                if (apiStatus === 'error') {
+                  setApiStatus('disconnected');
+                  setApiMessage('');
+                }
+              }}
             />
             <div className="flex items-center gap-2 text-xs">
-              {apiStatus === 'connected' ? (
-                <Wifi size={12} className="text-emerald-400" />
-              ) : (
-                <WifiOff size={12} className="text-red-400" />
-              )}
-              <span className={apiStatus === 'connected' ? 'text-emerald-400' : 'text-red-400'}>
-                {apiStatus === 'connected' ? 'Connected' : 'Disconnected'}
-              </span>
+              {statusConfig.icon}
+              <span className={statusConfig.className}>{statusConfig.label}</span>
             </div>
+            {apiMessage && (
+              <div className={`rounded-lg border px-3 py-2 text-[11px] leading-relaxed ${
+                apiStatus === 'error'
+                  ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+                  : 'border-violet-500/20 bg-violet-500/10 text-violet-200'
+              }`}>
+                {apiMessage}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="flex gap-3 mt-6">
-          <button className="btn-primary flex-1" onClick={handleSave} disabled={!apiKeyInput}>
-            <Save size={15} /> Save
+          <button className="btn-primary flex-1" onClick={handleSave} disabled={!apiKeyInput.trim() || apiStatus === 'checking'}>
+            {apiStatus === 'checking' ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+            Test & Save
           </button>
           <button className="btn-secondary flex-1" onClick={onClose}>
             <X size={15} /> Cancel
