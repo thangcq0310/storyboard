@@ -13,7 +13,7 @@ import { chromium } from '@playwright/test';
   if (!baseUrl) { console.error('No dev server found!'); process.exit(1); }
   console.log(`Using ${baseUrl}`);
 
-  const browser = await chromium.launch({ headless: false, slowMo: 150 });
+  const browser = await chromium.launch({ headless: true, slowMo: 150 });
   const page = await browser.newPage();
   await page.setViewportSize({ width: 1600, height: 900 });
   await page.goto(baseUrl);
