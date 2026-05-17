@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Copy, Settings2, Sparkles } from 'lucide-react';
+import { CheckCircle2, Copy, ImageIcon, Loader2, Settings2, Sparkles } from 'lucide-react';
 
 import type { Scene, WorkflowCase } from './types';
 import { initApiClient, PROVIDERS } from './lib/api';
@@ -41,6 +41,11 @@ function App() {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [selectedImages, setSelectedImages] = useState<Record<string, boolean>>({});
   const [outputTab, setOutputTab] = useState<OutputTab>('storyboard');
+
+  // Batch render state: null = idle, number = scenes completed so far
+  const [batchTotal, setBatchTotal] = useState<number>(0);
+  const [batchDone, setBatchDone] = useState<number>(0);
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
 
   const activePromptSet = getPromptSet(state.promptSet);
 
@@ -152,6 +157,83 @@ function App() {
 
   const toggleImageSelect = (id: string) => setSelectedImages((prev) => ({ ...prev, [id]: !prev[id] }));
 
+  /** Render all scenes sequentially, one at a time */
+  const handleRenderAllScenes = async () => {
+    if (isBatchRunning || scenes.length === 0) return;
+    setIsBatchRunning(true);
+    setBatchDone(0);
+    setBatchTotal(scenes.length);
+
+    for (let i = 0; i < scenes.length; i++) {
+      await handleGenerateImage(scenes[i].id);
+      setBatchDone(i + 1);
+    }
+
+    setIsBatchRunning(false);
+  };
+
+  /** Generate an image for a single scene and update its imageUrl in state */
+  const handleGenerateImage = async (sceneId: string) => {
+    const scene = scenes.find((s) => s.id === sceneId);
+    if (!scene) return;
+
+    // Mark scene as generating
+    setScenes((prev) =>
+      prev.map((s) => (s.id === sceneId ? { ...s, isGeneratingImage: true, imageError: undefined } : s))
+    );
+
+    const result = await apiClient.current.image.generateImage(
+      scene.prompt,
+      imageModel,
+      { aspect_ratio: '16:9', resolution: '1 MP' },
+      imageProvider,
+    );
+
+    setScenes((prev) =>
+      prev.map((s) =>
+        s.id === sceneId
+          ? {
+              ...s,
+              isGeneratingImage: false,
+              imageUrl: result.data?.url ?? s.imageUrl,
+              imageError: result.error ?? undefined,
+            }
+          : s
+      )
+    );
+  };
+
+  /** Generate a video from an already-generated image for a single scene */
+  const handleGenerateVideo = async (sceneId: string) => {
+    const scene = scenes.find((s) => s.id === sceneId);
+    if (!scene?.imageUrl) return;
+
+    setScenes((prev) =>
+      prev.map((s) => (s.id === sceneId ? { ...s, isGeneratingVideo: true, videoError: undefined } : s))
+    );
+
+    const result = await apiClient.current.video.generateVideo(
+      scene.imageUrl,
+      videoModel,
+      { duration: 5 },
+      scene.prompt,
+      videoProvider,
+    );
+
+    setScenes((prev) =>
+      prev.map((s) =>
+        s.id === sceneId
+          ? {
+              ...s,
+              isGeneratingVideo: false,
+              videoUrl: result.data?.url ?? s.videoUrl,
+              videoError: result.error ?? undefined,
+            }
+          : s
+      )
+    );
+  };
+
   const handlePromptTagClick = (label: string) => {
     setOutputTab('storyboard');
     const sectionMap: Record<string, string> = {
@@ -242,12 +324,40 @@ function App() {
                     <div className="section-label mb-1">Step 5</div>
                     <h2 className="text-base font-semibold">Generated Output</h2>
                   </div>
-                  <button className="btn-ghost text-xs" onClick={() => navigator.clipboard?.writeText(outputTab === 'seedance' ? seedancePromptText : storyboardPromptText)}>
-                    <Copy size={13} /> Copy
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {/* Render All Scenes button */}
+                    <button
+                      id="render-all-btn"
+                      type="button"
+                      disabled={isBatchRunning || isGenerating}
+                      onClick={handleRenderAllScenes}
+                      className="flex items-center gap-1.5 rounded-lg border border-violet-400/40 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 transition-all hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isBatchRunning ? (
+                        <><Loader2 size={12} className="animate-spin" /> Rendering {batchDone}/{batchTotal}…</>
+                      ) : (
+                        <><ImageIcon size={12} /> Render All Scenes</>
+                      )}
+                    </button>
+                    <button className="btn-ghost text-xs" onClick={() => navigator.clipboard?.writeText(outputTab === 'seedance' ? seedancePromptText : storyboardPromptText)}>
+                      <Copy size={13} /> Copy
+                    </button>
+                  </div>
                 </div>
 
-                <StoryboardPreview scenes={scenes} caseId={workflowCase} selectedImages={selectedImages} onToggleSelect={toggleImageSelect} isGenerating={isGenerating} generationProgress={isGenerating ? 50 : 100} />
+                <StoryboardPreview
+                  scenes={scenes}
+                  caseId={workflowCase}
+                  selectedImages={selectedImages}
+                  onToggleSelect={toggleImageSelect}
+                  isGenerating={isGenerating}
+                  generationProgress={isGenerating ? 50 : 100}
+                  onGenerateImage={handleGenerateImage}
+                  onGenerateVideo={handleGenerateVideo}
+                  isBatchRunning={isBatchRunning}
+                  batchDone={batchDone}
+                  batchTotal={batchTotal}
+                />
 
                 <div className="mt-4 flex gap-1 overflow-x-auto rounded-xl border border-white/[0.06] bg-white/[0.025] p-1 custom-scrollbar">
                   {[

@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion';
-import { ArrowDown, ArrowRight, Film, ImageIcon, Eye, Play, Clapperboard } from 'lucide-react';
+import { ArrowDown, ArrowRight, Film, ImageIcon, Eye, Play, Clapperboard, Loader2, Video, AlertCircle } from 'lucide-react';
 import { Scene, WorkflowCase } from '../types';
 
 const gridConfig: Record<WorkflowCase, { cols: number; rows: number; label: string; panels: number }> = {
@@ -62,6 +62,11 @@ interface Props {
   onToggleSelect: (id: string) => void;
   isGenerating: boolean;
   generationProgress: number;
+  onGenerateImage?: (sceneId: string) => void;
+  onGenerateVideo?: (sceneId: string) => void;
+  isBatchRunning?: boolean;
+  batchDone?: number;
+  batchTotal?: number;
 }
 
 export default function StoryboardPreview({
@@ -71,6 +76,11 @@ export default function StoryboardPreview({
   onToggleSelect,
   isGenerating,
   generationProgress,
+  onGenerateImage,
+  onGenerateVideo,
+  isBatchRunning = false,
+  batchDone = 0,
+  batchTotal = 0,
 }: Props) {
   const shouldReduceMotion = useReducedMotion();
   const config = gridConfig[caseId];
@@ -214,7 +224,24 @@ export default function StoryboardPreview({
         </div>
       </div>
 
-      <div className="relative overflow-hidden rounded-xl border border-white/[0.07] bg-black/20 p-2.5 sm:p-3">
+      {/* ── Batch progress bar ── */}
+      {isBatchRunning && batchTotal > 0 && (
+        <div className="mb-3">
+          <div className="flex items-center justify-between text-[10px] text-gray-400 mb-1">
+            <span className="flex items-center gap-1"><Loader2 size={9} className="animate-spin text-violet-300" /> Rendering scenes sequentially…</span>
+            <span className="text-violet-300 font-mono">{batchDone} / {batchTotal}</span>
+          </div>
+          <div className="w-full h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+            <motion.div
+              className="h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-400"
+              animate={{ width: `${batchTotal > 0 ? (batchDone / batchTotal) * 100 : 0}%` }}
+              transition={{ duration: 0.4 }}
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="relative rounded-xl border border-white/[0.07] bg-black/20 p-2.5 sm:p-3">
         <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_15%_0%,rgba(124,58,237,0.16),transparent_30%),radial-gradient(circle_at_85%_100%,rgba(16,185,129,0.08),transparent_30%)]" />
         <div className="relative grid gap-2" style={gridStyle}>
           {visibleScenes.map((scene, idx) => (
@@ -223,46 +250,112 @@ export default function StoryboardPreview({
               initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.96, y: 8 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.25, delay: shouldReduceMotion ? 0 : idx * 0.035 }}
-              className={`group relative aspect-video cursor-pointer overflow-hidden rounded-lg border transition-[border-color,box-shadow,transform] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/60 ${
-                selectedImages[scene.id]
-                  ? 'border-violet-400/50 shadow-[0_0_24px_rgba(124,58,237,0.18)] ring-1 ring-violet-500/20'
-                  : 'border-white/[0.06] hover:border-violet-300/30 hover:shadow-[0_0_20px_rgba(99,102,241,0.14)]'
-              }`}
-              role="button"
-              tabIndex={0}
-              onClick={() => onToggleSelect(scene.id)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  onToggleSelect(scene.id);
-                }
-              }}
-              aria-pressed={!!selectedImages[scene.id]}
-              aria-label={`Toggle scene ${idx + 1}`}
+              className="group relative flex flex-col gap-1"
             >
-              {scene.imageUrl ? (
-                <img src={scene.imageUrl} alt={`Scene ${idx + 1}`} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-violet-500/10 to-indigo-500/5">
-                  <ImageIcon size={18} className="text-white/[0.08]" />
+              {/* ── Main panel ── */}
+              <div
+                className={`relative aspect-video cursor-pointer overflow-hidden rounded-lg border transition-[border-color,box-shadow] ${
+                  selectedImages[scene.id]
+                    ? 'border-violet-400/50 shadow-[0_0_24px_rgba(124,58,237,0.18)] ring-1 ring-violet-500/20'
+                    : 'border-white/[0.06] hover:border-violet-300/30 hover:shadow-[0_0_20px_rgba(99,102,241,0.14)]'
+                }`}
+                role="button"
+                tabIndex={0}
+                onClick={() => onToggleSelect(scene.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggleSelect(scene.id); } }}
+                aria-pressed={!!selectedImages[scene.id]}
+                aria-label={`Toggle scene ${idx + 1}`}
+              >
+                {/* Video player (shown if videoUrl exists) */}
+                {scene.videoUrl ? (
+                  <video
+                    src={scene.videoUrl}
+                    className="h-full w-full object-cover"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : scene.imageUrl ? (
+                  <img src={scene.imageUrl} alt={`Scene ${idx + 1}`} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-violet-500/10 to-indigo-500/5">
+                    <ImageIcon size={18} className="text-white/[0.08]" />
+                  </div>
+                )}
+
+                {/* Hover overlay */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+
+                {/* Scene number */}
+                <div className="absolute bottom-1 left-1">
+                  <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold">S{idx + 1}</span>
                 </div>
-              )}
 
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                {/* Shot meta */}
+                <div className="absolute bottom-1 right-1 max-w-[64%] truncate rounded bg-black/60 px-1.5 py-0.5 text-[8px] text-gray-300">
+                  {getShotMeta(idx).shotType} / {getShotMeta(idx).beat}
+                </div>
 
-              <div className="absolute bottom-1 left-1">
-                <span className="rounded bg-black/60 px-1.5 py-0.5 text-[10px] font-semibold">S{idx + 1}</span>
-              </div>
-              <div className="absolute bottom-1 right-1 max-w-[64%] truncate rounded bg-black/60 px-1.5 py-0.5 text-[8px] text-gray-300">
-                {getShotMeta(idx).shotType} / {getShotMeta(idx).beat}
-              </div>
-              <div className="absolute right-1 top-1 rounded bg-black/45 p-1 text-white/50">
-                {readOrderIcon(idx)}
+                {/* Read-order arrow */}
+                <div className="absolute right-1 top-1 rounded bg-black/45 p-1 text-white/50">
+                  {readOrderIcon(idx)}
+                </div>
+
+                {/* Selected check */}
+                {selectedImages[scene.id] && (
+                  <div className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500">
+                    <span className="text-[8px] font-bold text-white">✓</span>
+                  </div>
+                )}
+
+                {/* Video badge */}
+                {scene.videoUrl && !scene.isGeneratingVideo && (
+                  <div className="absolute right-1 bottom-5 rounded bg-emerald-500/80 px-1.5 py-0.5 text-[8px] font-semibold text-white flex items-center gap-0.5">
+                    <Video size={8} /> Video
+                  </div>
+                )}
               </div>
 
-              {selectedImages[scene.id] && (
-                <div className="absolute left-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-violet-500">
-                  <span className="text-[8px] font-bold text-white">✓</span>
+              {/* ── Action buttons ── */}
+              <div className="flex gap-1">
+                {/* Render Image button */}
+                <button
+                  type="button"
+                  disabled={scene.isGeneratingImage || scene.isGeneratingVideo}
+                  onClick={() => onGenerateImage?.(scene.id)}
+                  className="flex flex-1 items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.04] py-1 text-[9px] font-medium text-gray-300 transition-all hover:border-violet-400/40 hover:bg-violet-500/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  title={scene.imageUrl ? 'Re-render image' : 'Generate image with AI'}
+                >
+                  {scene.isGeneratingImage ? (
+                    <><Loader2 size={9} className="animate-spin" /> Rendering…</>
+                  ) : (
+                    <><ImageIcon size={9} /> {scene.imageUrl ? 'Re-render' : 'Render'}</>
+                  )}
+                </button>
+
+                {/* Generate Video button – only enabled when imageUrl exists */}
+                <button
+                  type="button"
+                  disabled={!scene.imageUrl || scene.isGeneratingImage || scene.isGeneratingVideo}
+                  onClick={() => onGenerateVideo?.(scene.id)}
+                  className="flex flex-1 items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.04] py-1 text-[9px] font-medium text-gray-300 transition-all hover:border-emerald-400/40 hover:bg-emerald-500/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                  title={!scene.imageUrl ? 'Render an image first' : 'Generate video from this image'}
+                >
+                  {scene.isGeneratingVideo ? (
+                    <><Loader2 size={9} className="animate-spin" /> Generating…</>
+                  ) : (
+                    <><Film size={9} /> {scene.videoUrl ? 'Re-generate' : 'Video'}</>
+                  )}
+                </button>
+              </div>
+
+              {/* ── Error messages ── */}
+              {(scene.imageError || scene.videoError) && (
+                <div className="flex items-start gap-1 rounded-md border border-red-500/30 bg-red-500/10 px-2 py-1 text-[9px] text-red-300">
+                  <AlertCircle size={9} className="mt-0.5 flex-shrink-0" />
+                  <span className="break-all">{scene.imageError || scene.videoError}</span>
                 </div>
               )}
             </motion.div>

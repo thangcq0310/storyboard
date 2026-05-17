@@ -3,6 +3,11 @@ export interface Scene {
   description: string;
   prompt: string;
   imageUrl?: string;
+  videoUrl?: string;
+  isGeneratingImage?: boolean;
+  isGeneratingVideo?: boolean;
+  imageError?: string;
+  videoError?: string;
   danceStyle?: string;
   motionIntensity?: number;
 }
