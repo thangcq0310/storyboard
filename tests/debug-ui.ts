@@ -36,10 +36,15 @@ import { chromium } from '@playwright/test';
   
   // Verify the Render All button exists
   const renderAllBtn = page.locator('#render-all-btn');
+  const generateAllVideoBtn = page.locator('#generate-all-video-btn');
   const exists = await renderAllBtn.count();
   console.log(`✅ "Render All Scenes" button found: ${exists > 0}`);
   const text = exists > 0 ? await renderAllBtn.textContent() : 'NOT FOUND';
   console.log(`   Button text: "${text?.trim()}"`);
+  const videoExists = await generateAllVideoBtn.count();
+  console.log(`✅ "Generate All Videos" button found: ${videoExists > 0}`);
+  const videoText = videoExists > 0 ? await generateAllVideoBtn.textContent() : 'NOT FOUND';
+  console.log(`   Button text: "${videoText?.trim()}"`);
 
   // Count per-scene Render and Video buttons
   const renderBtns = await page.getByRole('button', { name: /^Render$|^Re-render$/i }).count();

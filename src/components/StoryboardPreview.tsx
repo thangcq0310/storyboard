@@ -310,12 +310,6 @@ export default function StoryboardPreview({
                   </div>
                 )}
 
-                {/* Video badge */}
-                {scene.videoUrl && !scene.isGeneratingVideo && (
-                  <div className="absolute right-1 bottom-5 rounded bg-emerald-500/80 px-1.5 py-0.5 text-[8px] font-semibold text-white flex items-center gap-0.5">
-                    <Video size={8} /> Video
-                  </div>
-                )}
               </div>
 
               {/* ── Action buttons ── */}
@@ -335,20 +329,6 @@ export default function StoryboardPreview({
                   )}
                 </button>
 
-                {/* Generate Video button – only enabled when imageUrl exists */}
-                <button
-                  type="button"
-                  disabled={!scene.imageUrl || scene.isGeneratingImage || scene.isGeneratingVideo}
-                  onClick={() => onGenerateVideo?.(scene.id)}
-                  className="flex flex-1 items-center justify-center gap-1 rounded-md border border-white/[0.08] bg-white/[0.04] py-1 text-[9px] font-medium text-gray-300 transition-all hover:border-emerald-400/40 hover:bg-emerald-500/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                  title={!scene.imageUrl ? 'Render an image first' : 'Generate video from this image'}
-                >
-                  {scene.isGeneratingVideo ? (
-                    <><Loader2 size={9} className="animate-spin" /> Generating…</>
-                  ) : (
-                    <><Film size={9} /> {scene.videoUrl ? 'Re-generate' : 'Video'}</>
-                  )}
-                </button>
               </div>
 
               {/* ── Error messages ── */}

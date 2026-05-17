@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Copy, ImageIcon, Loader2, Settings2, Sparkles } from 'lucide-react';
+import { CheckCircle2, Copy, ImageIcon, Loader2, Settings2, Sparkles, Video as VideoIcon } from 'lucide-react';
 
 import type { Scene, WorkflowCase } from './types';
 import { initApiClient, PROVIDERS } from './lib/api';
@@ -46,6 +46,8 @@ function App() {
   const [batchTotal, setBatchTotal] = useState<number>(0);
   const [batchDone, setBatchDone] = useState<number>(0);
   const [isBatchRunning, setIsBatchRunning] = useState(false);
+  const [isVideoBatchRunning, setIsVideoBatchRunning] = useState(false);
+  const [videoBatchDone, setVideoBatchDone] = useState(0);
 
   const activePromptSet = getPromptSet(state.promptSet);
 
@@ -204,7 +206,7 @@ function App() {
   };
 
   /** Generate a video from an already-generated image for a single scene */
-  const handleGenerateVideo = async (sceneId: string) => {
+  const handleGenerateVideo = async (sceneId: string, customPrompt?: string) => {
     const scene = scenes.find((s) => s.id === sceneId);
     if (!scene?.imageUrl) return;
 
@@ -216,7 +218,7 @@ function App() {
       scene.imageUrl,
       videoModel,
       { duration: 5 },
-      scene.prompt,
+      customPrompt || scene.prompt,
       videoProvider,
     );
 
@@ -232,6 +234,32 @@ function App() {
           : s
       )
     );
+  };
+
+  /** Generate video from all scene images combined into a single output */
+  const handleGenerateAllVideos = async () => {
+    const scenesWithImages = scenes.filter((s) => s.imageUrl);
+    if (isVideoBatchRunning || scenesWithImages.length === 0) return;
+    setIsVideoBatchRunning(true);
+    setVideoBatchDone(0);
+
+    // Use the first scene's image + all scene prompts combined
+    const firstScene = scenesWithImages[0];
+    if (!firstScene?.imageUrl) {
+      setIsVideoBatchRunning(false);
+      return;
+    }
+
+    // Build a combined prompt from all scenes
+    const combinedPrompt = scenesWithImages
+      .map((s, i) => `[Scene ${i + 1}]: ${s.prompt}`)
+      .join(' | ');
+
+    // Generate video from the first image with combined prompt
+    await handleGenerateVideo(firstScene.id, combinedPrompt);
+    setVideoBatchDone(1);
+
+    setIsVideoBatchRunning(false);
   };
 
   const handlePromptTagClick = (label: string) => {
@@ -339,6 +367,19 @@ function App() {
                         <><ImageIcon size={12} /> Render All Scenes</>
                       )}
                     </button>
+                    <button
+                      id="generate-all-video-btn"
+                      type="button"
+                      disabled={isVideoBatchRunning || scenes.length === 0}
+                      onClick={handleGenerateAllVideos}
+                      className="flex items-center gap-1.5 rounded-lg border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-200 transition-all hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isVideoBatchRunning ? (
+                        <><Loader2 size={12} className="animate-spin" /> Videos {videoBatchDone}/{scenes.filter(s => s.imageUrl).length}…</>
+                      ) : (
+                        <><VideoIcon size={12} /> Generate All Videos</>
+                      )}
+                    </button>
                     <button className="btn-ghost text-xs" onClick={() => navigator.clipboard?.writeText(outputTab === 'seedance' ? seedancePromptText : storyboardPromptText)}>
                       <Copy size={13} /> Copy
                     </button>
@@ -353,7 +394,6 @@ function App() {
                   isGenerating={isGenerating}
                   generationProgress={isGenerating ? 50 : 100}
                   onGenerateImage={handleGenerateImage}
-                  onGenerateVideo={handleGenerateVideo}
                   isBatchRunning={isBatchRunning}
                   batchDone={batchDone}
                   batchTotal={batchTotal}
